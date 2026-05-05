@@ -129,16 +129,15 @@ export default function LabelsTab() {
   const [csvError, setCsvError] = useState('')
   const [csvFileName, setCsvFileName] = useState('')
 
-  const [manualName, setManualName] = useState('')
-  const [manualSet, setManualSet] = useState('')
-  const [manualLang, setManualLang] = useState('')
-  const [manualRarity, setManualRarity] = useState('')
-  const [manualResults, setManualResults] = useState<InventoryCard[]>([])
-  const [useInvQty, setUseInvQty] = useState(true)
-  const [fixedQty, setFixedQty] = useState(1)
+  const [searchInput, setSearchInput] = useState('')
+  const [filterSet, setFilterSet] = useState('')
+  const [filterLang, setFilterLang] = useState('')
+  const [filterRarity, setFilterRarity] = useState('')
+  const [autocompleteResults, setAutocompleteResults] = useState<InventoryCard[]>([])
+  const [autocompleteOpen, setAutocompleteOpen] = useState(false)
+  const [selectedLabels, setSelectedLabels] = useState<LabelEntry[]>([])
   const [game, setGame] = useState('pokemon')
-  const [loading, setLoading] = useState(false)
-  const [searched, setSearched] = useState(false)
+  const [autocompleteLoading, setAutocompleteLoading] = useState(false)
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -182,21 +181,36 @@ export default function LabelsTab() {
     e.target.value = ''
   }
 
-  const searchManual = useCallback(async () => {
-    setLoading(true); setSearched(true)
-    let q = supabase.from('inventory_current').select('*')
-      .eq('game', game).gt('qty', 0).order('card_name').limit(200)
-    if (manualName.trim()) q = q.or(`card_name.ilike.%${manualName}%,name_es.ilike.%${manualName}%`)
-    if (manualSet.trim()) q = q.ilike('set_code', `%${manualSet}%`)
-    if (manualLang.trim()) q = q.eq('lang', manualLang.toUpperCase())
-    if (manualRarity.trim()) q = q.ilike('rarity', `%${manualRarity}%`)
-    const { data } = await q
-    setManualResults((data as InventoryCard[]) ?? [])
-    setLoading(false)
-  }, [manualName, manualSet, manualLang, manualRarity, game])
+  // Autocomplete search con debounce
+  const handleSearchChange = useCallback((value: string) => {
+    setSearchInput(value)
+    if (!value.trim()) {
+      setAutocompleteResults([])
+      setAutocompleteOpen(false)
+      return
+    }
 
-  const printManual = () => {
-    const labels: LabelEntry[] = manualResults.map(card => ({
+    setAutocompleteLoading(true)
+    const timer = setTimeout(async () => {
+      let q = supabase.from('inventory_current').select('*')
+        .eq('game', game).gt('qty', 0).order('card_name').limit(15)
+
+      q = q.or(`card_name.ilike.%${value}%,name_es.ilike.%${value}%`)
+      if (filterSet.trim()) q = q.ilike('set_code', `%${filterSet}%`)
+      if (filterLang.trim()) q = q.eq('lang', filterLang.toUpperCase())
+      if (filterRarity.trim()) q = q.ilike('rarity', `%${filterRarity}%`)
+
+      const { data } = await q
+      setAutocompleteResults((data as InventoryCard[]) ?? [])
+      setAutocompleteOpen(true)
+      setAutocompleteLoading(false)
+    }, 300)
+
+    return () => clearTimeout(timer)
+  }, [game, filterSet, filterLang, filterRarity])
+
+  const addToQueue = (card: InventoryCard) => {
+    const entry: LabelEntry = {
       sku: card.internal_sku,
       name: `${card.card_name} ${card.lang}${card.is_reverse ? ' Rev' : ''}`,
       lang: card.lang,
@@ -205,15 +219,25 @@ export default function LabelsTab() {
       rarity: card.rarity,
       listed_price_eur: card.listed_price_eur,
       condition: null,
-      qty: useInvQty ? (card.qty ?? 1) : fixedQty,
-    }))
-    void printLabels(labels)
+      qty: 1,
+    }
+    setSelectedLabels([...selectedLabels, entry])
+    setSearchInput('')
+    setAutocompleteOpen(false)
   }
 
-  const totalLabels = csvLabels.reduce((s, l) => s + l.qty, 0)
-  const manualTotalLabels = useInvQty
-    ? manualResults.reduce((s, c) => s + (c.qty ?? 1), 0)
-    : manualResults.length * fixedQty
+  const removeFromQueue = (index: number) => {
+    setSelectedLabels(selectedLabels.filter((_, i) => i !== index))
+  }
+
+  const updateQueueQty = (index: number, qty: number) => {
+    const updated = [...selectedLabels]
+    updated[index].qty = Math.max(1, qty)
+    setSelectedLabels(updated)
+  }
+
+  const totalSelectedLabels = selectedLabels.reduce((s, l) => s + l.qty, 0)
+  const totalCsvLabels = csvLabels.reduce((s, l) => s + l.qty, 0)
 
   return (
     <div className="flex flex-col h-full p-4 gap-4 overflow-hidden">
@@ -259,7 +283,7 @@ export default function LabelsTab() {
             <>
               <div className="flex items-center justify-between shrink-0">
                 <span className="text-gray-400 text-sm">
-                  {csvLabels.length} carta{csvLabels.length !== 1 ? 's' : ''} · {totalLabels} etiqueta{totalLabels !== 1 ? 's' : ''}
+                  {csvLabels.length} carta{csvLabels.length !== 1 ? 's' : ''} · {totalCsvLabels} etiqueta{totalCsvLabels !== 1 ? 's' : ''}
                 </span>
                 <button onClick={() => void printLabels(csvLabels)}
                   className="bg-green-700 hover:bg-green-600 px-4 py-2 rounded-lg text-sm font-bold transition-colors">
@@ -299,82 +323,105 @@ export default function LabelsTab() {
 
       {mode === 'manual' && (
         <div className="flex flex-col gap-3 flex-1 overflow-hidden">
-          <div className="grid grid-cols-2 gap-2 shrink-0">
-            <input value={manualName} onChange={e => setManualName(e.target.value)}
-              placeholder="Nombre / Pokémon" onKeyDown={e => e.key === 'Enter' && searchManual()}
-              className="col-span-2 bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-500" />
-            <input value={manualSet} onChange={e => setManualSet(e.target.value)}
-              placeholder="Set (ej: OBF)" onKeyDown={e => e.key === 'Enter' && searchManual()}
+          <div className="grid grid-cols-3 gap-2 shrink-0">
+            <input value={searchInput} onChange={e => handleSearchChange(e.target.value)}
+              placeholder="🔍 Buscar carta..." autoComplete="off"
+              className="col-span-3 bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-500" />
+            <input value={filterSet} onChange={e => setFilterSet(e.target.value)}
+              placeholder="Set (ej: OBF)"
               className="bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-500" />
-            <input value={manualRarity} onChange={e => setManualRarity(e.target.value)}
-              placeholder="Rareza (ej: Holo)" onKeyDown={e => e.key === 'Enter' && searchManual()}
+            <input value={filterLang} onChange={e => setFilterLang(e.target.value)}
+              placeholder="Idioma (ESP/ENG)"
               className="bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-500" />
-            <input value={manualLang} onChange={e => setManualLang(e.target.value)}
-              placeholder="Idioma (ESP/ENG)" onKeyDown={e => e.key === 'Enter' && searchManual()}
+            <input value={filterRarity} onChange={e => setFilterRarity(e.target.value)}
+              placeholder="Rareza (ej: Holo)"
               className="bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-500" />
-            <button onClick={searchManual}
-              className="bg-purple-600 hover:bg-purple-500 rounded-lg text-sm font-bold transition-colors">
-              Buscar
-            </button>
           </div>
 
-          {manualResults.length > 0 && (
-            <>
-              <div className="flex items-center gap-4 shrink-0">
-                <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
-                  <input type="checkbox" checked={useInvQty} onChange={e => setUseInvQty(e.target.checked)} />
-                  Usar qty de inventario
-                </label>
-                {!useInvQty && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-gray-400">Qty por carta:</span>
-                    <input type="number" min="1" max="50" value={fixedQty}
-                      onChange={e => setFixedQty(parseInt(e.target.value) || 1)}
-                      className="w-16 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm" />
-                  </div>
+          <div className="grid grid-cols-2 gap-3 flex-1 overflow-hidden">
+            {/* Búsqueda y resultados */}
+            <div className="flex flex-col gap-3 overflow-hidden min-w-0">
+              {autocompleteOpen && autocompleteResults.length > 0 && (
+                <div className="bg-gray-800 border border-gray-600 rounded-lg overflow-y-auto max-h-96">
+                  {autocompleteResults.map(card => (
+                    <button
+                      key={card.internal_sku}
+                      onClick={() => addToQueue(card)}
+                      className="w-full text-left px-3 py-2 hover:bg-gray-700 border-b border-gray-700 last:border-b-0 transition-colors"
+                    >
+                      <div className="font-medium text-sm">{card.card_name}{card.is_reverse && <span className="text-blue-400 text-xs ml-1">Rev</span>}</div>
+                      <div className="text-xs text-gray-400">{card.set_code} · {card.lang} · {card.rarity ?? '—'}</div>
+                      <div className="text-xs text-gray-500 mt-0.5">Stock: {card.qty} · €{card.listed_price_eur?.toFixed(2) ?? '—'}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {autocompleteLoading && searchInput && (
+                <div className="text-gray-400 text-sm text-center py-4">Buscando...</div>
+              )}
+              {searchInput && autocompleteOpen && autocompleteResults.length === 0 && !autocompleteLoading && (
+                <div className="text-gray-500 text-sm text-center py-4">Sin resultados</div>
+              )}
+            </div>
+
+            {/* Cola de etiquetas */}
+            <div className="flex flex-col gap-3 overflow-hidden bg-gray-800 rounded-lg p-3 border border-gray-700">
+              <div className="text-sm font-bold text-gray-300 shrink-0">
+                📋 Cola ({selectedLabels.length})
+              </div>
+
+              <div className="flex-1 overflow-y-auto space-y-2">
+                {selectedLabels.length === 0 ? (
+                  <div className="text-gray-500 text-xs text-center py-8">Selecciona cartas para generar etiquetas</div>
+                ) : (
+                  selectedLabels.map((label, idx) => (
+                    <div key={idx} className="bg-gray-700 rounded-lg p-2 text-xs space-y-1">
+                      <div className="font-medium text-gray-200 truncate">{label.name}</div>
+                      <div className="text-gray-400">{label.set_code}</div>
+                      <div className="flex items-center gap-2 justify-between">
+                        <input
+                          type="number"
+                          min="1"
+                          max="50"
+                          value={label.qty}
+                          onChange={e => updateQueueQty(idx, parseInt(e.target.value) || 1)}
+                          className="w-12 bg-gray-600 border border-gray-500 rounded px-1.5 py-0.5 text-gray-200 text-xs"
+                        />
+                        <button
+                          onClick={() => removeFromQueue(idx)}
+                          className="text-red-400 hover:text-red-300 text-xs font-bold"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  ))
                 )}
-                <span className="text-gray-500 text-xs ml-auto">
-                  {manualResults.length} carta{manualResults.length !== 1 ? 's' : ''} → {manualTotalLabels} etiqueta{manualTotalLabels !== 1 ? 's' : ''}
-                </span>
               </div>
 
-              <div className="flex-1 overflow-y-auto">
-                <table className="w-full text-sm">
-                  <thead className="sticky top-0 bg-gray-900">
-                    <tr className="text-gray-400 text-xs text-left border-b border-gray-800">
-                      <th className="px-3 py-2">Carta</th>
-                      <th className="px-3 py-2">Set</th>
-                      <th className="px-3 py-2">Lang</th>
-                      <th className="px-3 py-2">Rareza</th>
-                      <th className="px-3 py-2 text-right">Stock</th>
-                      <th className="px-3 py-2 text-right">Precio</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-800">
-                    {manualResults.map(card => (
-                      <tr key={card.internal_sku} className="hover:bg-gray-800">
-                        <td className="px-3 py-2 font-medium">{card.card_name}{card.is_reverse && <span className="text-blue-400 text-xs ml-1">Rev</span>}</td>
-                        <td className="px-3 py-2 text-gray-400">{card.set_code}</td>
-                        <td className="px-3 py-2 text-gray-400">{card.lang}</td>
-                        <td className="px-3 py-2 text-gray-400 text-xs">{card.rarity ?? '—'}</td>
-                        <td className={`px-3 py-2 text-right font-bold ${card.qty <= 2 ? 'text-orange-400' : 'text-gray-300'}`}>{card.qty}</td>
-                        <td className="px-3 py-2 text-right text-green-400">{card.listed_price_eur ? `€${card.listed_price_eur.toFixed(2)}` : '—'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <button onClick={printManual}
-                className="shrink-0 w-full bg-green-700 hover:bg-green-600 rounded-lg py-2.5 text-sm font-bold transition-colors">
-                🖨️ Imprimir etiquetas — {manualTotalLabels} etiqueta{manualTotalLabels !== 1 ? 's' : ''}
-              </button>
-            </>
-          )}
-
-          {searched && !loading && manualResults.length === 0 && (
-            <div className="text-gray-500 text-sm text-center mt-8">Sin resultados — ajusta los filtros</div>
-          )}
+              {selectedLabels.length > 0 && (
+                <>
+                  <div className="border-t border-gray-600 pt-2 shrink-0">
+                    <div className="text-xs text-gray-400 text-center mb-2">
+                      Total: {totalSelectedLabels} etiqueta{totalSelectedLabels !== 1 ? 's' : ''}
+                    </div>
+                    <button
+                      onClick={() => void printLabels(selectedLabels)}
+                      className="w-full bg-green-700 hover:bg-green-600 rounded-lg py-2 text-xs font-bold transition-colors text-white"
+                    >
+                      🖨️ Generar PDF
+                    </button>
+                    <button
+                      onClick={() => setSelectedLabels([])}
+                      className="w-full bg-gray-600 hover:bg-gray-500 rounded-lg py-1.5 text-xs transition-colors text-gray-200 mt-1"
+                    >
+                      Limpiar
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>
