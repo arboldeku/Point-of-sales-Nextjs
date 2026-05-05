@@ -1,11 +1,8 @@
 'use client'
 
-// Ported from prisma-scan/ui/labels_tab.py
-// Two modes: CSV upload (Cardmarket/internal format) + manual selection from inventory
-// Output: browser print dialog (same label format as core/labels.py)
-
 import { useState, useCallback } from 'react'
 import { supabase, type InventoryCard } from '@/lib/supabase'
+import bwipjs from 'bwip-js'
 
 type LabelEntry = {
   sku: string
@@ -19,58 +16,97 @@ type LabelEntry = {
   qty: number
 }
 
+// Generate a DataMatrix PNG data URL for a given SKU
+function dataMatrixDataUrl(text: string): string {
+  try {
+    const canvas = document.createElement('canvas')
+    bwipjs.toCanvas(canvas, {
+      bcid: 'datamatrix',
+      text,
+      scale: 5,
+      paddingwidth: 2,
+      paddingheight: 2,
+    })
+    return canvas.toDataURL('image/png')
+  } catch {
+    return ''
+  }
+}
+
 function printLabels(labels: LabelEntry[]) {
-  // Mirrors _generate_label_pdf / _draw_label from core/labels.py — browser print version
   const expanded = labels.flatMap(l => Array(l.qty).fill(null).map(() => l))
+
+  // Pre-generate DataMatrix for each unique SKU
+  const skuImages: Record<string, string> = {}
+  const uniqueSkus = [...new Set(expanded.map(l => l.sku).filter(Boolean))]
+  for (const sku of uniqueSkus) {
+    const url = dataMatrixDataUrl(sku)
+    if (url) skuImages[sku] = url
+  }
+
   const html = `<!DOCTYPE html><html><head>
+<meta charset="utf-8">
 <style>
   @page { size: A4; margin: 8mm; }
-  body { font-family: 'Courier New', monospace; font-size: 9px; margin: 0; }
+  body { font-family: 'Courier New', monospace; font-size: 9px; margin: 0; background: white; color: black; }
+  .no-print { padding: 8px; background: #f5f5f5; margin-bottom: 8px; }
   .grid { display: flex; flex-wrap: wrap; gap: 2mm; }
   .label {
-    width: 88mm; height: 32mm; border: 1px solid #bbb; padding: 3mm;
-    box-sizing: border-box; page-break-inside: avoid; overflow: hidden;
-    display: flex; flex-direction: column; justify-content: space-between;
+    width: 88mm; height: 32mm;
+    border: 1px solid #bbb; padding: 3mm;
+    box-sizing: border-box; page-break-inside: avoid;
+    display: flex; flex-direction: row; gap: 2mm;
+    overflow: hidden;
   }
-  .name { font-size: 11px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .details { color: #555; font-size: 8px; margin-top: 1mm; }
-  .price { font-size: 15px; font-weight: bold; text-align: right; }
-  .sku { font-size: 7px; color: #aaa; margin-top: 1mm; }
+  .label-text { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: space-between; }
+  .label-dm { width: 24mm; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .label-dm img { width: 22mm; height: 22mm; image-rendering: pixelated; }
+  .name { font-size: 10px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .details { font-size: 8px; color: #444; margin-top: 1mm; }
+  .bottom { display: flex; justify-content: space-between; align-items: flex-end; margin-top: auto; }
+  .sku { font-size: 7px; color: #888; }
+  .price { font-size: 15px; font-weight: bold; }
   @media print { .no-print { display: none; } }
 </style></head><body>
-<div class="no-print" style="padding:8px;background:#f5f5f5;margin-bottom:8px;">
-  <strong>${expanded.length} etiquetas</strong> — Ctrl+P para imprimir
+<div class="no-print">
+  <strong>${expanded.length} etiquetas</strong> — Ctrl+P / Cmd+P para imprimir
 </div>
 <div class="grid">
 ${expanded.map(l => `
   <div class="label">
-    <div>
-      <div class="name">${l.name}${l.condition && l.condition !== 'NM' ? ` [${l.condition}]` : ''}</div>
-      <div class="details">${l.set_code}${l.cn ? ` · ${l.cn}` : ''} · ${l.rarity ?? '—'} · ${l.lang}</div>
+    <div class="label-text">
+      <div>
+        <div class="name">${l.name}${l.condition && l.condition !== 'NM' ? ` [${l.condition}]` : ''}</div>
+        <div class="details">${l.set_code}${l.cn ? ` · ${l.cn}` : ''} · ${l.rarity ?? '—'} · ${l.lang}</div>
+      </div>
+      <div class="bottom">
+        <div class="sku">${l.sku || '—'}</div>
+        <div class="price">${l.listed_price_eur ? `€${l.listed_price_eur.toFixed(2)}` : ''}</div>
+      </div>
     </div>
-    <div style="display:flex;justify-content:space-between;align-items:flex-end;">
-      <div class="sku">${l.sku}</div>
-      <div class="price">${l.listed_price_eur ? `€${l.listed_price_eur.toFixed(2)}` : ''}</div>
+    <div class="label-dm">
+      ${skuImages[l.sku] ? `<img src="${skuImages[l.sku]}" alt="${l.sku}">` : '<div style="width:22mm;height:22mm;border:1px solid #ccc;display:flex;align-items:center;justify-content:center;font-size:6px;color:#aaa">sin SKU</div>'}
     </div>
   </div>`).join('')}
-</div></body></html>`
+</div>
+<script>window.onload = function() { setTimeout(function() { window.print(); }, 400); }<\/script>
+</body></html>`
 
-  const blob = new Blob([html], { type: 'text/html' })
-  const url = URL.createObjectURL(blob)
-  const win = window.open(url, '_blank')
-  if (!win) { alert('Permite ventanas emergentes para imprimir'); URL.revokeObjectURL(url); return }
-  win.addEventListener('load', () => { win.print(); URL.revokeObjectURL(url) })
+  // Use document.write — avoids blob URL popup-blocker issues on HTTPS
+  const win = window.open('', '_blank')
+  if (!win) { alert('Permite ventanas emergentes para imprimir etiquetas'); return }
+  win.document.open()
+  win.document.write(html)
+  win.document.close()
 }
 
 export default function LabelsTab() {
   const [mode, setMode] = useState<'csv' | 'manual'>('csv')
 
-  // CSV mode state
   const [csvLabels, setCsvLabels] = useState<LabelEntry[]>([])
   const [csvError, setCsvError] = useState('')
   const [csvFileName, setCsvFileName] = useState('')
 
-  // Manual mode state
   const [manualName, setManualName] = useState('')
   const [manualSet, setManualSet] = useState('')
   const [manualLang, setManualLang] = useState('')
@@ -82,7 +118,6 @@ export default function LabelsTab() {
   const [loading, setLoading] = useState(false)
   const [searched, setSearched] = useState(false)
 
-  // ── CSV mode ──────────────────────────────────────────────────────────────
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -122,12 +157,9 @@ export default function LabelsTab() {
     } catch (err: any) {
       setCsvError(err.message)
     }
-
-    // Reset input so same file can be re-uploaded
     e.target.value = ''
   }
 
-  // ── Manual mode ───────────────────────────────────────────────────────────
   const searchManual = useCallback(async () => {
     setLoading(true); setSearched(true)
     let q = supabase.from('inventory_current').select('*')
@@ -165,7 +197,6 @@ export default function LabelsTab() {
     <div className="flex flex-col h-full p-4 gap-4 overflow-hidden">
       <h2 className="text-lg font-bold text-gray-200 shrink-0">🏷️ Generador de etiquetas</h2>
 
-      {/* Mode toggle — mirrors radio in labels_tab.py */}
       <div className="flex gap-2 shrink-0">
         {(['csv', 'manual'] as const).map(m => (
           <button key={m} onClick={() => setMode(m)}
@@ -180,7 +211,6 @@ export default function LabelsTab() {
         </select>
       </div>
 
-      {/* ── CSV MODE ── */}
       {mode === 'csv' && (
         <div className="flex flex-col gap-4 flex-1 overflow-hidden">
           <div className="border-2 border-dashed border-gray-700 rounded-xl p-6 text-center shrink-0">
@@ -214,7 +244,6 @@ export default function LabelsTab() {
                   🖨️ Imprimir etiquetas
                 </button>
               </div>
-
               <div className="flex-1 overflow-y-auto">
                 <table className="w-full text-sm">
                   <thead className="sticky top-0 bg-gray-900">
@@ -246,7 +275,6 @@ export default function LabelsTab() {
         </div>
       )}
 
-      {/* ── MANUAL MODE ── */}
       {mode === 'manual' && (
         <div className="flex flex-col gap-3 flex-1 overflow-hidden">
           <div className="grid grid-cols-2 gap-2 shrink-0">
@@ -272,8 +300,7 @@ export default function LabelsTab() {
             <>
               <div className="flex items-center gap-4 shrink-0">
                 <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
-                  <input type="checkbox" checked={useInvQty} onChange={e => setUseInvQty(e.target.checked)}
-                    className="rounded" />
+                  <input type="checkbox" checked={useInvQty} onChange={e => setUseInvQty(e.target.checked)} />
                   Usar qty de inventario
                 </label>
                 {!useInvQty && (
@@ -318,7 +345,7 @@ export default function LabelsTab() {
 
               <button onClick={printManual}
                 className="shrink-0 w-full bg-green-700 hover:bg-green-600 rounded-lg py-2.5 text-sm font-bold transition-colors">
-                🖨️ Generar PDF — {manualTotalLabels} etiqueta{manualTotalLabels !== 1 ? 's' : ''}
+                🖨️ Imprimir etiquetas — {manualTotalLabels} etiqueta{manualTotalLabels !== 1 ? 's' : ''}
               </button>
             </>
           )}
