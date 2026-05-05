@@ -4,12 +4,11 @@ import { NextRequest, NextResponse } from 'next/server'
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
+    const { _test_mode, ...row } = body
+    const table = _test_mode ? 'scan_events_test' : 'scan_events'
     const supabase = createServerClient()
 
-    const { error } = await supabase
-      .from('scan_events')
-      .insert([body])
-
+    const { error } = await supabase.from(table).insert([row])
     if (error) throw error
     return NextResponse.json({ success: true })
   } catch (err: any) {
@@ -20,11 +19,12 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json()
-    const { sale_event_id, qty } = body
+    const { sale_event_id, qty, _test_mode } = body
+    const table = _test_mode ? 'scan_events_test' : 'scan_events'
     const supabase = createServerClient()
 
     const { error } = await supabase
-      .from('scan_events')
+      .from(table)
       .update({ qty, gross_amount: qty * (body.unit_price || 0) })
       .eq('sale_event_id', sale_event_id)
 
@@ -38,11 +38,12 @@ export async function PATCH(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   try {
     const body = await req.json()
-    const { sale_event_id } = body
+    const { sale_event_id, _test_mode } = body
+    const table = _test_mode ? 'scan_events_test' : 'scan_events'
     const supabase = createServerClient()
 
     const { error } = await supabase
-      .from('scan_events')
+      .from(table)
       .delete()
       .eq('sale_event_id', sale_event_id)
 

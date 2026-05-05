@@ -91,6 +91,9 @@ export default function SalesTab() {
   // Daily log (all confirmed sales today, mirrors st.session_state.sales)
   const [dailySales, setDailySales] = useState<ScanEvent[]>([])
 
+  // Test mode — sandbox writes to scan_events_test, skips inventory + FIFO
+  const [testMode, setTestMode] = useState(false)
+
   // UI state
   const [showPin, setShowPin] = useState(false)
   const [lastMsg, setLastMsg] = useState<{ok: boolean; text: string} | null>(null)
@@ -101,22 +104,39 @@ export default function SalesTab() {
     setSessionId(getSessionId())
   }, [])
 
-  // Load persisted device label
+  // Load persisted device label + test mode
   useEffect(() => {
     const saved = localStorage.getItem('prisma_device_label')
     if (saved) setDeviceLabel(saved)
+    const tm = localStorage.getItem('prisma_test_mode')
+    if (tm === 'true') setTestMode(true)
     searchRef.current?.focus()
   }, [])
 
-  // Poll cart every 2 seconds (pending items for this session)
+  const toggleTestMode = () => {
+    const next = !testMode
+    setTestMode(next)
+    localStorage.setItem('prisma_test_mode', String(next))
+    setCart([])
+  }
+
+  // Poll cart every 2 seconds — table switches with testMode
   useEffect(() => {
-    loadCart()
-    const t = setInterval(loadCart, 2000)
+    if (!sessionId) return
+    const table = testMode ? 'scan_events_test' : 'scan_events'
+    const load = async () => {
+      const { data } = await supabase.from(table).select('*')
+        .eq('session_id', sessionId).eq('status', 'pending').order('sale_ts', { ascending: true })
+      setCart((data as ScanEvent[]) ?? [])
+    }
+    load()
+    const t = setInterval(load, 2000)
     return () => clearInterval(t)
-  }, [sessionId])
+  }, [sessionId, testMode])
 
   const loadCart = async () => {
-    const { data } = await supabase.from('scan_events').select('*')
+    const table = testMode ? 'scan_events_test' : 'scan_events'
+    const { data } = await supabase.from(table).select('*')
       .eq('session_id', sessionId).eq('status', 'pending').order('sale_ts', { ascending: true })
     setCart((data as ScanEvent[]) ?? [])
   }
@@ -165,7 +185,7 @@ export default function SalesTab() {
     if (existing) {
       await fetch('/api/pos/cart', { method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sale_event_id: existing.sale_event_id, qty: existing.qty + 1, unit_price: existing.unit_price }) })
+        body: JSON.stringify({ sale_event_id: existing.sale_event_id, qty: existing.qty + 1, unit_price: existing.unit_price, _test_mode: testMode }) })
       loadCart(); return
     }
     const price = card.listed_price_eur ?? 0
@@ -191,7 +211,7 @@ export default function SalesTab() {
       trade_amount: isCambio && cambioHasMoney ? tradeAmount : null,
     }
     await fetch('/api/pos/cart', { method: 'POST',
-      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(event) })
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...event, _test_mode: testMode }) })
     loadCart()
     setResults([]); setQuery('')
     searchRef.current?.focus()
@@ -199,12 +219,13 @@ export default function SalesTab() {
 
   const removeFromCart = async (sale_event_id: string) => {
     await fetch('/api/pos/cart', { method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sale_event_id }) })
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sale_event_id, _test_mode: testMode }) })
     loadCart()
   }
 
   const handleConfirmWithPin = async (pin: string) => {
-    const res = await fetch('/api/pos/confirm', { method: 'POST',
+    const endpoint = testMode ? '/api/pos/confirm-test' : '/api/pos/confirm'
+    const res = await fetch(endpoint, { method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ session_id: sessionId, pin, discount_eur: discount, payment_method: payMode }) })
     const data = await res.json()
@@ -248,7 +269,16 @@ export default function SalesTab() {
   const totalTarjeta = dailySales.filter(s => s.payment_method === 'tarjeta').reduce((s, c) => s + (c.gross_amount ?? 0), 0)
 
   return (
-    <div className="flex h-full overflow-hidden">
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* TEST MODE BANNER */}
+      {testMode && (
+        <div className="bg-orange-600 text-white text-center text-sm font-bold py-1.5 flex items-center justify-center gap-3 shrink-0">
+          🧪 MODO TEST — las ventas NO afectan inventario ni FIFO
+          <button onClick={toggleTestMode} className="bg-orange-800 hover:bg-orange-900 px-2 py-0.5 rounded text-xs">Desactivar</button>
+        </div>
+      )}
+
+      <div className="flex flex-1 overflow-hidden">
       {showPin && (
         <PinModal cartCount={cart.length} subtotal={subtotal} discount={discount} payMode={payMode}
           onConfirm={handleConfirmWithPin} onCancel={() => setShowPin(false)} />
@@ -270,6 +300,10 @@ export default function SalesTab() {
             className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm">
             <option>Iberian</option><option>SA</option><option>LIGA</option><option>Online</option>
           </select>
+          <button onClick={toggleTestMode}
+            className={`px-2 py-1 rounded text-xs font-semibold transition-colors ${testMode ? 'bg-orange-600 text-white' : 'bg-gray-800 text-gray-500 hover:text-gray-300'}`}>
+            🧪 Test
+          </button>
         </div>
 
         {/* Mode: VENTA / CAMBIO */}
@@ -464,6 +498,7 @@ export default function SalesTab() {
             ➕ Nuevo ticket
           </button>
         </div>
+      </div>
       </div>
     </div>
   )
