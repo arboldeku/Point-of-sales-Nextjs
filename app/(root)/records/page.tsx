@@ -40,15 +40,26 @@ function extractSetCode(displayName: string): string {
 }
 
 function toCSVPowertools(rows: SaleRow[]): string {
-  // Powertools format: cardmarket_id, card_name, language, set_code, qty
-  const headers = ['cardmarket_id', 'card_name', 'language', 'set_code', 'qty']
+  // All original columns + Powertools columns
+  const headers = ['sale_event_id','sale_ts','session_id','internal_sku','display_name','qty','unit_price','gross_amount','discount_eur','channel','payment_method','sale_type','cardmarket_id','card_name','language','set_code']
   const lines = rows.map(r => headers.map(h => {
     let val = ''
-    if (h === 'cardmarket_id') val = r.cardmarket_id || extractCardmarketId(r.internal_sku)
+    if (h === 'sale_event_id') val = r.sale_event_id
+    else if (h === 'sale_ts') val = r.sale_ts
+    else if (h === 'session_id') val = r.session_id
+    else if (h === 'internal_sku') val = r.internal_sku
+    else if (h === 'display_name') val = r.display_name
+    else if (h === 'qty') val = String(r.qty || 0)
+    else if (h === 'unit_price') val = r.unit_price ? String(r.unit_price) : ''
+    else if (h === 'gross_amount') val = r.gross_amount ? String(r.gross_amount) : ''
+    else if (h === 'discount_eur') val = r.discount_eur ? String(r.discount_eur) : ''
+    else if (h === 'channel') val = r.channel
+    else if (h === 'payment_method') val = r.payment_method
+    else if (h === 'sale_type') val = r.sale_type
+    else if (h === 'cardmarket_id') val = r.cardmarket_id || extractCardmarketId(r.internal_sku)
     else if (h === 'card_name') val = r.card_name || r.display_name.split(' —')[0].trim()
     else if (h === 'language') val = r.language || ''
     else if (h === 'set_code') val = r.set_code || extractSetCode(r.display_name)
-    else if (h === 'qty') val = String(r.qty || 0)
     return JSON.stringify(val)
   }).join(','))
   return [headers.join(','), ...lines].join('\n')
