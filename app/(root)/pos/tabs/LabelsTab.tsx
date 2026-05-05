@@ -2,7 +2,6 @@
 
 import { useState, useCallback } from 'react'
 import { supabase, type InventoryCard } from '@/lib/supabase'
-import bwipjs from 'bwip-js'
 
 type LabelEntry = {
   sku: string
@@ -16,83 +15,106 @@ type LabelEntry = {
   qty: number
 }
 
-// Generate a DataMatrix PNG data URL for a given SKU
-function dataMatrixDataUrl(text: string): string {
-  try {
-    const canvas = document.createElement('canvas')
-    bwipjs.toCanvas(canvas, {
-      bcid: 'datamatrix',
-      text,
-      scale: 5,
-      paddingwidth: 2,
-      paddingheight: 2,
-    })
-    return canvas.toDataURL('image/png')
-  } catch {
-    return ''
-  }
-}
-
-function printLabels(labels: LabelEntry[]) {
+async function printLabels(labels: LabelEntry[]) {
   const expanded = labels.flatMap(l => Array(l.qty).fill(null).map(() => l))
 
-  // Pre-generate DataMatrix for each unique SKU
+  // Dynamic import — ensures bwip-js only runs in browser context (no SSR)
+  let bwipjs: any
+  try {
+    bwipjs = (await import('bwip-js')).default
+  } catch {
+    bwipjs = null
+  }
+
+  // Pre-generate DataMatrix data URLs for unique SKUs
   const skuImages: Record<string, string> = {}
   const uniqueSkus = [...new Set(expanded.map(l => l.sku).filter(Boolean))]
   for (const sku of uniqueSkus) {
-    const url = dataMatrixDataUrl(sku)
-    if (url) skuImages[sku] = url
+    if (!bwipjs) break
+    try {
+      const canvas = document.createElement('canvas')
+      bwipjs.toCanvas(canvas, { bcid: 'datamatrix', text: sku, scale: 4, paddingwidth: 1, paddingheight: 1 })
+      const url = canvas.toDataURL('image/png')
+      if (url) skuImages[sku] = url
+    } catch {
+      // individual SKU failed — skip
+    }
   }
 
-  const html = `<!DOCTYPE html><html><head>
-<meta charset="utf-8">
+  // Use HTML entities for all non-ASCII chars to avoid document.write encoding issues
+  const esc = (s: string | null | undefined) =>
+    (s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
 <style>
   @page { size: A4; margin: 8mm; }
-  body { font-family: 'Courier New', monospace; font-size: 9px; margin: 0; background: white; color: black; }
-  .no-print { padding: 8px; background: #f5f5f5; margin-bottom: 8px; }
-  .grid { display: flex; flex-wrap: wrap; gap: 2mm; }
+  * { box-sizing: border-box; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 9px; margin: 0; background: #fff; color: #000; }
+  .no-print { padding: 8px 12px; background: #f0f0f0; font-size: 12px; border-bottom: 1px solid #ddd; }
+  .grid { display: flex; flex-wrap: wrap; gap: 2mm; padding: 2mm; }
   .label {
     width: 88mm; height: 32mm;
-    border: 1px solid #bbb; padding: 3mm;
-    box-sizing: border-box; page-break-inside: avoid;
-    display: flex; flex-direction: row; gap: 2mm;
-    overflow: hidden;
+    border: 1px solid #999;
+    display: flex; flex-direction: row;
+    overflow: hidden; page-break-inside: avoid;
   }
-  .label-text { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: space-between; }
-  .label-dm { width: 24mm; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-  .label-dm img { width: 22mm; height: 22mm; image-rendering: pixelated; }
-  .name { font-size: 10px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .details { font-size: 8px; color: #444; margin-top: 1mm; }
-  .bottom { display: flex; justify-content: space-between; align-items: flex-end; margin-top: auto; }
-  .sku { font-size: 7px; color: #888; }
-  .price { font-size: 15px; font-weight: bold; }
+  .label-text {
+    flex: 1; min-width: 0;
+    padding: 3mm 2mm 3mm 3mm;
+    display: flex; flex-direction: column; justify-content: space-between;
+    border-right: 1px solid #ccc;
+  }
+  .label-dm {
+    width: 26mm; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    padding: 2mm;
+  }
+  .label-dm img { width: 22mm; height: 22mm; image-rendering: pixelated; display: block; }
+  .label-dm .no-dm {
+    width: 22mm; height: 22mm; border: 1px dashed #bbb;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 6px; color: #aaa; text-align: center;
+  }
+  .name { font-size: 10.5px; font-weight: bold; line-height: 1.2; margin-bottom: 1mm; overflow: hidden; }
+  .details { font-size: 8px; color: #555; line-height: 1.4; }
+  .spacer { flex: 1; }
+  .bottom { display: flex; justify-content: space-between; align-items: flex-end; }
+  .sku { font-size: 6.5px; color: #999; font-family: monospace; }
+  .price { font-size: 16px; font-weight: bold; color: #000; line-height: 1; }
   @media print { .no-print { display: none; } }
-</style></head><body>
-<div class="no-print">
-  <strong>${expanded.length} etiquetas</strong> — Ctrl+P / Cmd+P para imprimir
-</div>
+</style>
+</head>
+<body>
+<div class="no-print"><strong>${expanded.length} etiqueta${expanded.length !== 1 ? 's' : ''}</strong> &mdash; Ctrl+P para imprimir &bull; Cierra esta ventana cuando acabes</div>
 <div class="grid">
-${expanded.map(l => `
-  <div class="label">
-    <div class="label-text">
-      <div>
-        <div class="name">${l.name}${l.condition && l.condition !== 'NM' ? ` [${l.condition}]` : ''}</div>
-        <div class="details">${l.set_code}${l.cn ? ` · ${l.cn}` : ''} · ${l.rarity ?? '—'} · ${l.lang}</div>
-      </div>
-      <div class="bottom">
-        <div class="sku">${l.sku || '—'}</div>
-        <div class="price">${l.listed_price_eur ? `€${l.listed_price_eur.toFixed(2)}` : ''}</div>
-      </div>
+${expanded.map(l => {
+  const condTag = l.condition && l.condition !== 'NM' ? ` [${esc(l.condition)}]` : ''
+  const details = [l.set_code, l.cn, l.rarity, l.lang].filter(Boolean).map(esc).join(' &middot; ')
+  const price = l.listed_price_eur ? `&euro;${l.listed_price_eur.toFixed(2)}` : ''
+  const dmHtml = skuImages[l.sku]
+    ? `<img src="${skuImages[l.sku]}" alt="${esc(l.sku)}">`
+    : `<div class="no-dm">sin<br>SKU</div>`
+  return `<div class="label">
+  <div class="label-text">
+    <div class="name">${esc(l.name)}${condTag}</div>
+    <div class="details">${details}</div>
+    <div class="spacer"></div>
+    <div class="bottom">
+      <div class="sku">${esc(l.sku) || '&mdash;'}</div>
+      <div class="price">${price}</div>
     </div>
-    <div class="label-dm">
-      ${skuImages[l.sku] ? `<img src="${skuImages[l.sku]}" alt="${l.sku}">` : '<div style="width:22mm;height:22mm;border:1px solid #ccc;display:flex;align-items:center;justify-content:center;font-size:6px;color:#aaa">sin SKU</div>'}
-    </div>
-  </div>`).join('')}
+  </div>
+  <div class="label-dm">${dmHtml}</div>
+</div>`
+}).join('\n')}
 </div>
-<script>window.onload = function() { setTimeout(function() { window.print(); }, 400); }<\/script>
-</body></html>`
+<script>window.onload = function() { setTimeout(function() { window.print(); }, 500); }<\/script>
+</body>
+</html>`
 
-  // Use document.write — avoids blob URL popup-blocker issues on HTTPS
   const win = window.open('', '_blank')
   if (!win) { alert('Permite ventanas emergentes para imprimir etiquetas'); return }
   win.document.open()
@@ -185,7 +207,7 @@ export default function LabelsTab() {
       condition: null,
       qty: useInvQty ? (card.qty ?? 1) : fixedQty,
     }))
-    printLabels(labels)
+    void printLabels(labels)
   }
 
   const totalLabels = csvLabels.reduce((s, l) => s + l.qty, 0)
@@ -239,7 +261,7 @@ export default function LabelsTab() {
                 <span className="text-gray-400 text-sm">
                   {csvLabels.length} carta{csvLabels.length !== 1 ? 's' : ''} · {totalLabels} etiqueta{totalLabels !== 1 ? 's' : ''}
                 </span>
-                <button onClick={() => printLabels(csvLabels)}
+                <button onClick={() => void printLabels(csvLabels)}
                   className="bg-green-700 hover:bg-green-600 px-4 py-2 rounded-lg text-sm font-bold transition-colors">
                   🖨️ Imprimir etiquetas
                 </button>
