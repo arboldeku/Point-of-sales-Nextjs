@@ -28,7 +28,7 @@ async function printLabels(labels: LabelEntry[]) {
 
   // Pre-generate DataMatrix data URLs for unique SKUs
   const skuImages: Record<string, string> = {}
-  const uniqueSkus = [...new Set(expanded.map(l => l.sku).filter(Boolean))]
+  const uniqueSkus = Array.from(new Set(expanded.map(l => l.sku).filter(Boolean)))
   for (const sku of uniqueSkus) {
     if (!bwipjs) break
     try {
