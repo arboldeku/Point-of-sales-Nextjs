@@ -350,7 +350,7 @@ export default function LabelsTab() {
                       className="w-full text-left px-3 py-2 hover:bg-gray-700 border-b border-gray-700 last:border-b-0 transition-colors"
                     >
                       <div className="font-medium text-sm">{card.card_name}{card.is_reverse && <span className="text-blue-400 text-xs ml-1">Rev</span>}</div>
-                      <div className="text-xs text-gray-400">{card.set_code} · {card.lang} · {card.rarity ?? '—'}</div>
+                      <div className="text-xs text-gray-400">{card.set_code} #{card.cn ?? '—'} · {card.lang}</div>
                       <div className="text-xs text-gray-500 mt-0.5">Stock: {card.qty} · €{card.listed_price_eur?.toFixed(2) ?? '—'}</div>
                     </button>
                   ))}
