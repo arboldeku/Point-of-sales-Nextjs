@@ -16,6 +16,10 @@ type SaleRow = {
   channel: string
   payment_method: string
   sale_type: string
+  cardmarket_id?: string
+  card_name?: string
+  language?: string
+  set_code?: string
 }
 
 function formatTime(ts: string) {
@@ -23,14 +27,35 @@ function formatTime(ts: string) {
   catch { return ts }
 }
 
-function toCSV(rows: SaleRow[]): string {
-  const headers = ['sale_event_id','sale_ts','session_id','internal_sku','display_name','qty','unit_price','gross_amount','discount_eur','channel','payment_method','sale_type']
-  const lines = rows.map(r => headers.map(h => JSON.stringify((r as any)[h] ?? '')).join(','))
+// Extract cardmarket_id from internal_sku (everything before last dash)
+function extractCardmarketId(sku: string): string {
+  const parts = sku.split('-')
+  return parts.slice(0, -1).join('-')
+}
+
+// Parse display_name to extract set_code (format: "Card Name LANG Rev? — SET_CODE")
+function extractSetCode(displayName: string): string {
+  const match = displayName.match(/—\s*(\S+)\s*$/)
+  return match ? match[1] : ''
+}
+
+function toCSVPowertools(rows: SaleRow[]): string {
+  // Powertools format: cardmarket_id, card_name, language, set_code, qty
+  const headers = ['cardmarket_id', 'card_name', 'language', 'set_code', 'qty']
+  const lines = rows.map(r => headers.map(h => {
+    let val = ''
+    if (h === 'cardmarket_id') val = r.cardmarket_id || extractCardmarketId(r.internal_sku)
+    else if (h === 'card_name') val = r.card_name || r.display_name.split(' —')[0].trim()
+    else if (h === 'language') val = r.language || ''
+    else if (h === 'set_code') val = r.set_code || extractSetCode(r.display_name)
+    else if (h === 'qty') val = String(r.qty || 0)
+    return JSON.stringify(val)
+  }).join(','))
   return [headers.join(','), ...lines].join('\n')
 }
 
 function downloadCSV(rows: SaleRow[], sessionId: string) {
-  const csv = toCSV(rows)
+  const csv = toCSVPowertools(rows)
   const blob = new Blob([csv], { type: 'text/csv' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
