@@ -344,15 +344,19 @@ export default function LabelsTab() {
               {autocompleteOpen && autocompleteResults.length > 0 && (
                 <div className="bg-gray-800 border border-gray-600 rounded-lg overflow-y-auto max-h-96">
                   {autocompleteResults.map(card => (
-                    <button
-                      key={card.internal_sku}
-                      onClick={() => addToQueue(card)}
-                      className="w-full text-left px-3 py-2 hover:bg-gray-700 border-b border-gray-700 last:border-b-0 transition-colors"
-                    >
-                      <div className="font-medium text-sm">{card.card_name}{card.is_reverse && <span className="text-blue-400 text-xs ml-1">Rev</span>}</div>
-                      <div className="text-xs text-gray-400">{card.set_code} #{card.cn ?? '—'} · {card.lang}</div>
-                      <div className="text-xs text-gray-500 mt-0.5">Stock: {card.qty} · €{card.listed_price_eur?.toFixed(2) ?? '—'}</div>
-                    </button>
+                    <div key={card.internal_sku} className="flex items-center gap-2 px-3 py-2 hover:bg-gray-700 border-b border-gray-700 last:border-b-0 transition-colors">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm">{card.card_name}{card.is_reverse && <span className="text-blue-400 text-xs ml-1">Rev</span>}</div>
+                        <div className="text-xs text-gray-400">{card.set_code} #{card.cn ?? '—'} · {card.lang}</div>
+                        <div className="text-xs text-gray-500 mt-0.5">Stock: {card.qty} · €{card.listed_price_eur?.toFixed(2) ?? '—'}</div>
+                      </div>
+                      <button
+                        onClick={() => addToQueue(card)}
+                        className="shrink-0 bg-purple-600 hover:bg-purple-500 text-white rounded-lg px-3 py-1.5 text-sm font-bold transition-colors"
+                      >
+                        ➕
+                      </button>
+                    </div>
                   ))}
                 </div>
               )}
