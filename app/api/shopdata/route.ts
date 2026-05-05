@@ -1,32 +1,13 @@
-export const dynamic = 'force-dynamic';
-import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import { NextResponse } from 'next/server';
 
-// Instantiate Prisma client
-const prisma = new PrismaClient();
+// Stub — returns static shop config without Prisma
+// The original template used Prisma for this; we use Supabase for all real data
+export async function GET() {
+  return NextResponse.json({
+    data: { id: 'prisma-store', name: 'Prisma Store', tax: 0 }
+  }, { status: 200 });
+}
 
-// Handler function for GET requests
-export async function GET(req: NextRequest) {
-  try {
-    // Fetch shopData from the database
-    const shopData = await prisma.shopData.findMany();
-
-    // Extract the first item from the result
-    const data = shopData[0];
-
-    // Return the data as a JSON response with a 200 status code
-    return NextResponse.json({ data }, { status: 200 });
-  } catch (error) {
-    // Log the error for debugging purposes
-    console.error('Error fetching shop data:', error);
-
-    // Return a detailed error message as a JSON response with a 500 status code
-    return NextResponse.json(
-      { error: 'Failed to fetch shop data. Please try again later.' },
-      { status: 500 }
-    );
-  } finally {
-    // Disconnect the Prisma client after the request is processed
-    await prisma.$disconnect();
-  }
+export async function PATCH() {
+  return NextResponse.json({ data: null }, { status: 200 });
 }
