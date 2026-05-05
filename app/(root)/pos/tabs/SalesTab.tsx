@@ -141,12 +141,12 @@ export default function SalesTab() {
     setCart((data as ScanEvent[]) ?? [])
   }
 
-  // Search inventory
+  // Search inventory — uses inventory_available view (qty minus active locks from other sessions)
   const search = useCallback(async (q: string) => {
     if (!q.trim()) { setResults([]); return }
     setLoading(true)
-    const { data } = await supabase.from('inventory_current').select('*')
-      .gt('qty', 0).eq('game', game)
+    const { data } = await supabase.from('inventory_available').select('*')
+      .gt('available_qty', 0).eq('game', game)
       .or(`internal_sku.ilike.%${q}%,card_name.ilike.%${q}%,name_es.ilike.%${q}%,set_code.ilike.%${q}%,cn.ilike.%${q}%`)
       .order('card_name').limit(30)
     setResults((data as InventoryCard[]) ?? [])
@@ -169,8 +169,8 @@ export default function SalesTab() {
   }
 
   const addToCartBySku = async (sku: string) => {
-    const { data } = await supabase.from('inventory_current').select('*')
-      .eq('internal_sku', sku).gt('qty', 0).single()
+    const { data } = await supabase.from('inventory_available').select('*')
+      .eq('internal_sku', sku).gt('available_qty', 0).single()
     if (data) {
       await addToCart(data as InventoryCard)
       setLastMsg({ ok: true, text: `✅ Escaneado: ${(data as InventoryCard).card_name}` })
@@ -185,7 +185,7 @@ export default function SalesTab() {
     if (existing) {
       await fetch('/api/pos/cart', { method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sale_event_id: existing.sale_event_id, qty: existing.qty + 1, unit_price: existing.unit_price, _test_mode: testMode }) })
+        body: JSON.stringify({ sale_event_id: existing.sale_event_id, qty: existing.qty + 1, unit_price: existing.unit_price, internal_sku: existing.internal_sku, session_id: sessionId, _test_mode: testMode }) })
       loadCart(); return
     }
     const price = card.listed_price_eur ?? 0
@@ -218,8 +218,10 @@ export default function SalesTab() {
   }
 
   const removeFromCart = async (sale_event_id: string) => {
+    const item = cart.find(c => c.sale_event_id === sale_event_id)
     await fetch('/api/pos/cart', { method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sale_event_id, _test_mode: testMode }) })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sale_event_id, internal_sku: item?.internal_sku, session_id: sessionId, _test_mode: testMode }) })
     loadCart()
   }
 
@@ -401,7 +403,9 @@ export default function SalesTab() {
               </div>
               <div className="text-right ml-4 shrink-0">
                 <div className="font-bold text-green-400 text-sm">{card.listed_price_eur ? `€${card.listed_price_eur.toFixed(2)}` : '—'}</div>
-                <div className={`text-xs mt-0.5 ${card.qty <= 2 ? 'text-orange-400' : 'text-gray-500'}`}>stock: {card.qty}</div>
+                <div className={`text-xs mt-0.5 ${(card.available_qty ?? card.qty) <= 2 ? 'text-orange-400' : 'text-gray-500'}`}>
+                  libre: {card.available_qty ?? card.qty}{card.available_qty !== undefined && card.available_qty < card.qty ? ` / ${card.qty}` : ''}
+                </div>
               </div>
             </button>
           ))}

@@ -21,6 +21,7 @@ export type InventoryCard = {
   internal_sku: string
   cardmarket_id: string
   qty: number
+  available_qty?: number  // from inventory_available view (qty minus active locks)
   card_name: string
   set_code: string
   set_name: string

@@ -144,6 +144,9 @@ export async function POST(req: NextRequest) {
     if (spResult.error) throw spResult.error
     if (fifoResult.error) throw fifoResult.error
 
+    // Release all locks for this session
+    await supabase.from('cart_locks').delete().eq('session_id', session_id)
+
     return NextResponse.json({ success: true, result: data })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 })

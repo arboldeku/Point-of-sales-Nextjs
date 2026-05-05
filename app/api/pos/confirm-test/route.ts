@@ -63,6 +63,9 @@ export async function POST(req: NextRequest) {
       .eq('session_id', session_id)
       .eq('status', 'pending')
 
+    // Test mode doesn't lock, but clean up just in case
+    await supabase.from('cart_locks').delete().eq('session_id', session_id)
+
     return NextResponse.json({ success: true, test_mode: true })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 })
