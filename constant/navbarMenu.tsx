@@ -1,42 +1,36 @@
 import {
-  Home,
-  Package,
-  ShoppingCart,
-  Archive,
+  ScanLine,
+  ShoppingBag,
+  Layers,
+  ClipboardList,
   Settings,
-  Star,
 } from 'lucide-react';
 import { NavItem } from '@/types/Navbar';
 
 export const NAVBAR_ITEMS: NavItem[] = [
   {
-    title: 'Home',
-    path: '/home',
-    icon: <Home className="h-4 w-4" />,
+    title: 'Prisma-Scan',
+    path: '/pos',
+    icon: <ScanLine className="h-4 w-4" />,
   },
   {
     title: 'Orders',
     path: '/orders',
-    icon: <ShoppingCart className="h-4 w-4" />,
+    icon: <ShoppingBag className="h-4 w-4" />,
   },
   {
-    title: 'Product',
+    title: 'Inventory',
     path: '/product',
-    icon: <Package className="h-4 w-4" />,
+    icon: <Layers className="h-4 w-4" />,
   },
   {
     title: 'Records',
     path: '/records',
-    icon: <Archive className="h-4 w-4" />,
+    icon: <ClipboardList className="h-4 w-4" />,
   },
   {
-    title: 'Settings',
+    title: 'Admin',
     path: '/settings',
     icon: <Settings className="h-4 w-4" />,
-  },
-  {
-    title: 'Technologies',
-    path: '/technologies',
-    icon: <Star className="h-4 w-4" />,
   },
 ];
