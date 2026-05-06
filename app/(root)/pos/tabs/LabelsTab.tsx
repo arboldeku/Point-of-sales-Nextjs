@@ -33,13 +33,32 @@ function normalizeLang(raw: string): string {
   return LANG_MAP[key] ?? raw.trim().toUpperCase().slice(0, 3)
 }
 
-function printLabels(labels: LabelEntry[]) {
-  const expanded = labels.flatMap(l => Array(l.qty).fill(null).map(() => l))
+async function printLabels(labels: LabelEntry[]) {
+  // 1. Fetch release dates for sort
+  let dateMap: Record<string, number> = {}
+  try {
+    const res = await fetch('/api/release-dates')
+    if (res.ok) dateMap = await res.json()
+  } catch { /* Drive not mounted or offline — labels print in original order */ }
+
+  // 2. Sort: newest expansion first, then CN ascending within set
+  const sorted = [...labels].sort((a, b) => {
+    const da = dateMap[a.set_code.toUpperCase()]
+    const db = dateMap[b.set_code.toUpperCase()]
+    const ta = da != null ? -da : 1e15   // unknown sets go to end
+    const tb = db != null ? -db : 1e15
+    if (ta !== tb) return ta - tb
+    const ca = parseInt(a.cn?.match(/(\d+)/)?.[1] ?? '9999')
+    const cb = parseInt(b.cn?.match(/(\d+)/)?.[1] ?? '9999')
+    return ca - cb
+  })
+
+  // 3. Expand by qty after sort
+  const expanded = sorted.flatMap(l => Array(l.qty).fill(null).map(() => l))
 
   const esc = (s: string | null | undefined) =>
     (s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
-  // Strip trailing lang suffix added by addToQueue ("Charizard ex ENG Rev" → "Charizard ex")
   function baseName(l: LabelEntry): string {
     return l.name
       .replace(new RegExp(`\\s+${l.lang}(\\s+Rev)?\\s*$`, 'i'), '')
@@ -47,12 +66,10 @@ function printLabels(labels: LabelEntry[]) {
       .trim() || l.name
   }
 
-  // Display name with lang in parens: "Mega Audino ex (ESP)"
   function displayName(l: LabelEntry): string {
     return `${baseName(l)} (${l.lang.toUpperCase()})`
   }
 
-  // Barcode data for JsBarcode (embedded as JSON to avoid script injection)
   const barcodeData = JSON.stringify(
     expanded.map((l, i) => ({ id: `bc${i}`, val: l.sku || '' }))
   )
@@ -63,19 +80,19 @@ function printLabels(labels: LabelEntry[]) {
 <meta charset="UTF-8">
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>
 <style>
-  @page { size: A4; margin: 5mm; }
+  /* Thermal printer: each page = one label (60×30mm) */
+  @page { size: 60mm 30mm; margin: 0; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: Arial, sans-serif; background: white; }
-  .no-print { padding: 8px 12px; background: #f0f0f0; font-size: 12px; border-bottom: 1px solid #ddd; }
-  .grid { display: flex; flex-wrap: wrap; gap: 2mm; padding: 2mm; }
+  body { font-family: Arial, sans-serif; background: #ddd; display: flex; flex-direction: column; align-items: center; gap: 4mm; padding: 4mm; }
+  .no-print { width: 60mm; padding: 4px 8px; background: #f0f0f0; font-size: 10px; border: 1px solid #ccc; border-radius: 2px; }
 
-  /* Exact dimensions from prisma-scan core/labels.py:
-     LBL_W=60mm LBL_H=30mm TOP_H=13mm LEFT_W=18mm BC_H=15mm */
+  /* Screen preview: label with shadow */
   .label {
     width: 60mm; height: 30mm;
     border: 1px solid #000;
     display: flex; flex-direction: column;
-    overflow: hidden; page-break-inside: avoid; background: white;
+    overflow: hidden; background: white;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
   }
 
   /* Top section: 13mm tall = TOP_H */
@@ -107,7 +124,7 @@ function printLabels(labels: LabelEntry[]) {
     white-space: nowrap; line-height: 1;
   }
 
-  /* Right info block: Helvetica-BoldOblique 9pt / Helvetica-Bold 8pt */
+  /* Right info block */
   .lbl-info {
     flex: 1; display: flex; flex-direction: column;
     justify-content: space-evenly;
@@ -131,7 +148,7 @@ function printLabels(labels: LabelEntry[]) {
     color: #000; line-height: 1;
   }
 
-  /* Barcode section: remaining 17mm (30mm - 13mm), BC_H=15mm centered */
+  /* Barcode section: 17mm tall (30mm - 13mm) */
   .lbl-barcode {
     flex: 1;
     border-top: 1px solid #000;
@@ -141,12 +158,21 @@ function printLabels(labels: LabelEntry[]) {
   }
   .lbl-barcode svg { display: block; width: 100%; height: 100%; }
 
-  @media print { .no-print { display: none; } }
+  /* Print: each label fills the 60×30mm page exactly */
+  @media print {
+    .no-print { display: none; }
+    body { background: white; display: block; padding: 0; }
+    .label {
+      width: 100%; height: 100%;
+      margin: 0; border: none; box-shadow: none;
+      page-break-after: always;
+    }
+    .label:last-child { page-break-after: auto; }
+  }
 </style>
 </head>
 <body>
-<div class="no-print"><strong>${expanded.length} etiqueta${expanded.length !== 1 ? 's' : ''}</strong> &mdash; Ctrl+P para imprimir</div>
-<div class="grid">
+<div class="no-print"><strong>${expanded.length} etiqueta${expanded.length !== 1 ? 's' : ''}</strong> &mdash; Ctrl+P → impresora térmica 60×30mm</div>
 ${expanded.map((l, i) => {
   const dn = esc(displayName(l))
   const setLine = [l.set_code, l.cn].filter(Boolean).map(esc).join(' - ')
@@ -167,7 +193,6 @@ ${expanded.map((l, i) => {
   </div>
 </div>`
 }).join('\n')}
-</div>
 <script>
 var barcodes = ${barcodeData};
 window.onload = function() {
