@@ -211,7 +211,6 @@ export default function LabelsTab() {
   const [csvLabels, setCsvLabels] = useState<LabelEntry[]>([])
   const [csvError, setCsvError] = useState('')
   const [csvFileName, setCsvFileName] = useState('')
-  const [loteLoading, setLoteLoading] = useState(false)
 
   const [searchInput, setSearchInput] = useState('')
   const [filterSet, setFilterSet] = useState('')
@@ -245,40 +244,6 @@ export default function LabelsTab() {
     })
   }
 
-  const loadLoteDeHoy = async () => {
-    setLoteLoading(true); setCsvError(''); setCsvLabels([]); setCsvFileName('')
-    try {
-      const today = new Date().toISOString().split('T')[0]
-      const { data, error } = await supabase
-        .from('inventory_current')
-        .select('*')
-        .eq('game', game)
-        .gte('last_updated', today + 'T00:00:00')
-        .lt('last_updated', today + 'T23:59:59.999')
-        .gt('qty', 0)
-        .order('set_code').order('cn')
-
-      if (error) throw new Error(`Supabase: ${error.message}`)
-      if (!data?.length) throw new Error(`No hay cartas con last_updated = hoy (${today})`)
-
-      const labels: LabelEntry[] = (data as InventoryCard[]).map(c => ({
-        sku: c.internal_sku,
-        name: `${c.card_name} ${c.lang}${c.is_reverse ? ' Rev' : ''}`,
-        lang: c.lang,
-        set_code: c.set_code,
-        cn: c.cn,
-        rarity: c.rarity,
-        listed_price_eur: c.listed_price_eur,
-        condition: null,
-        qty: 1,
-      }))
-      setCsvLabels(labels)
-      setCsvFileName(`Lote ${today} (${labels.length} cartas)`)
-    } catch (err: any) {
-      setCsvError(err.message)
-    }
-    setLoteLoading(false)
-  }
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -457,13 +422,6 @@ export default function LabelsTab() {
                 </div>
               </label>
             </div>
-            <button
-              onClick={loadLoteDeHoy}
-              disabled={loteLoading}
-              className="flex flex-col items-center justify-center gap-1 px-4 py-3 bg-amber-700 hover:bg-amber-600 disabled:bg-gray-700 rounded-xl text-sm font-bold transition-colors shrink-0 min-w-[110px]">
-              <span className="text-lg">📦</span>
-              <span>{loteLoading ? 'Cargando…' : 'Lote de hoy'}</span>
-            </button>
           </div>
 
           {csvError && (
