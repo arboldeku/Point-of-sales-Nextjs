@@ -53,6 +53,7 @@ export type ScanEvent = {
   payment_method: string | null
   money_direction: string
   trade_amount: number | null
+  game: string
 }
 
 export type RefCard = {

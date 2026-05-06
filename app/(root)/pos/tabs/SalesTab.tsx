@@ -203,6 +203,7 @@ export default function SalesTab() {
       gross_amount: price,
       discount_eur: 0,
       channel,
+      game,
       source_system: 'prisma-pos',
       status: 'pending',
       sale_type: isCambio ? 'cambio' : 'physical',
