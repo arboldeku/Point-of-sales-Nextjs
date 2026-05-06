@@ -52,8 +52,8 @@ function printLabels(labels: LabelEntry[]) {
   .grid { display: flex; flex-wrap: wrap; gap: 2mm; padding: 2mm; }
 
   .label {
-    width: 90mm; height: 33mm;
-    border: 0.5px solid #bbb;
+    width: 63mm; height: 28mm;
+    border: 1px solid #111;
     display: flex; flex-direction: column;
     overflow: hidden; page-break-inside: avoid; background: white;
   }
@@ -65,45 +65,44 @@ function printLabels(labels: LabelEntry[]) {
 
   /* Left brand block */
   .lbl-brand {
-    width: 22mm; flex-shrink: 0;
-    background: #111;
+    width: 18mm; flex-shrink: 0;
+    background: #000;
     display: flex; flex-direction: column;
     align-items: center; justify-content: center;
-    padding: 2px 3px; gap: 1px;
+    padding: 2px 2px; gap: 2px;
   }
   .lbl-brand-name {
-    font-weight: 900; font-size: 11px; letter-spacing: 0.12em;
+    font-weight: 900; font-size: 13px; letter-spacing: 0.06em;
     text-transform: uppercase; color: #ffffff; line-height: 1;
   }
   .lbl-brand-sub {
-    font-size: 4.5px; color: #aaaaaa; letter-spacing: 0.08em;
-    text-transform: uppercase; text-align: center; line-height: 1.2;
+    font-size: 4px; color: #cccccc; letter-spacing: 0.06em;
+    text-transform: uppercase; text-align: center; line-height: 1.3;
   }
 
   /* Right info block */
   .lbl-info {
     flex: 1; display: flex; flex-direction: column;
-    justify-content: center; padding: 3px 6px; gap: 2px;
+    justify-content: center; padding: 2px 5px; gap: 1.5px;
     background: #ffffff;
   }
   .lbl-name {
     font-style: italic; font-weight: 700; font-size: 9px;
-    color: #111; line-height: 1.2;
+    color: #000; line-height: 1.2;
   }
   .lbl-set {
-    font-size: 7.5px; color: #333; font-weight: 500; letter-spacing: 0.02em;
+    font-size: 7.5px; color: #222; font-weight: 400;
   }
   .lbl-sku {
-    font-family: 'Courier New', monospace; font-size: 7px; color: #555;
-    letter-spacing: 0.05em;
+    font-size: 7.5px; color: #222; font-weight: 400;
   }
 
   /* Barcode full-width bottom */
   .lbl-barcode {
-    border-top: 0.5px solid #ddd;
-    padding: 1px 4px 1px;
+    border-top: 1px solid #111;
+    padding: 0 2px;
     display: flex; align-items: center; justify-content: center;
-    background: #ffffff; flex-shrink: 0; height: 10mm;
+    background: #ffffff; flex-shrink: 0; height: 11mm;
   }
   .lbl-barcode svg { width: 100%; height: 100%; }
 
@@ -137,7 +136,7 @@ ${expanded.map((l, i) => {
 <script>
 var barcodes = ${barcodeData};
 window.onload = function() {
-  var opts = {format:"CODE128",width:1.6,height:28,displayValue:false,margin:0,background:"#ffffff",lineColor:"#000000"};
+  var opts = {format:"CODE128",width:1.4,height:30,displayValue:false,margin:0,background:"#ffffff",lineColor:"#000000"};
   barcodes.forEach(function(b) { if (b.val) try { JsBarcode('#'+b.id, b.val, opts); } catch(e) {} });
   setTimeout(function() { window.print(); }, 500);
 };
