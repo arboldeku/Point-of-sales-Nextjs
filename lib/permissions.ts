@@ -1,9 +1,10 @@
 import { createBrowserClient } from './supabase-auth'
+import type { Database } from '@/types/supabase'
 
 const PERMISSION_CACHE = new Map<string, string[]>()
 const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
-export type PermissionCode = 
+export type PermissionCode =
   | 'SELL_PRODUCT'
   | 'APPLY_DISCOUNT_ON_SALE'
   | 'CREATE_PRODUCT'
@@ -15,8 +16,10 @@ export type PermissionCode =
   | 'VIEW_TRANSACTIONS'
   | 'DELETE_TRANSACTION'
 
+export type UserRole = Database['public']['Enums']['user_role_enum']
+
 // Get user's permissions
-export const getUserPermissions = async (role: string): Promise<string[]> => {
+export const getUserPermissions = async (role: UserRole): Promise<string[]> => {
   // Check cache first
   if (PERMISSION_CACHE.has(role)) {
     return PERMISSION_CACHE.get(role)!
@@ -53,7 +56,7 @@ export const getUserPermissions = async (role: string): Promise<string[]> => {
 
 // Check single permission
 export const hasPermission = async (
-  role: string,
+  role: UserRole,
   permission: PermissionCode
 ): Promise<boolean> => {
   const userPerms = await getUserPermissions(role)
