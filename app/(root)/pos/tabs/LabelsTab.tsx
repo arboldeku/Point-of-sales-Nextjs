@@ -89,6 +89,9 @@ function printLabels(labels: LabelEntry[]) {
     display: flex; flex-direction: column;
     align-items: center; justify-content: center;
     padding: 0 1.5mm; gap: 1.5mm;
+    color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
   .lbl-brand-name {
     font-family: 'Century Gothic', CenturyGothic, AppleGothic, Arial, sans-serif;
