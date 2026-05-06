@@ -1,70 +1,71 @@
-import { NextAuthOptions } from 'next-auth';
-import CredentialsProvider from 'next-auth/providers/credentials';
-import { compare } from 'bcryptjs';
-import { prisma } from './prisma';
+import bcrypt from 'bcryptjs'
+import jwt from 'jsonwebtoken'
 
-export const authOptions: NextAuthOptions = {
-  providers: [
-    CredentialsProvider({
-      name: 'Credentials',
-      credentials: {
-        username: { label: 'Username', type: 'text' },
-        password: { label: 'Password', type: 'password' },
-      },
-      async authorize(credentials) {
-        if (!credentials?.username || !credentials?.password) {
-          throw new Error('Invalid credentials');
-        }
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-prod'
+const JWT_EXPIRY = '7d'
 
-        const user = await prisma.user.findUnique({
-          where: { username: credentials.username },
-        });
+/**
+ * Hash a password with bcrypt
+ */
+export const hashPassword = async (password: string): Promise<string> => {
+  return bcrypt.hash(password, 10)
+}
 
-        if (!user || !user.password) {
-          throw new Error('Invalid credentials');
-        }
+/**
+ * Verify password against bcrypt hash
+ */
+export const verifyPassword = async (
+  password: string,
+  hash: string
+): Promise<boolean> => {
+  return bcrypt.compare(password, hash)
+}
 
-        const isPasswordCorrect = await compare(
-          credentials.password,
-          user.password
-        );
-
-        if (!isPasswordCorrect) {
-          throw new Error('Invalid credentials');
-        }
-
-        return {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          image: user.image,
-          role: user.role,
-        };
-      },
-    }),
-  ],
-  callbacks: {
-    async jwt({ token, user }) {
-      if (user) {
-        token.id = user.id;
-        token.role = (user as any).role;
-      }
-      return token;
+/**
+ * Create JWT token
+ */
+export const createToken = (userId: string, role: string): string => {
+  return jwt.sign(
+    {
+      userId,
+      role,
+      iat: Date.now(),
     },
-    async session({ session, token }) {
-      if (session.user) {
-        (session.user as any).id = token.id;
-        (session.user as any).role = token.role;
-      }
-      return session;
-    },
-  },
-  pages: {
-    signIn: '/auth/login',
-  },
-  session: {
-    strategy: 'jwt',
-    maxAge: 24 * 60 * 60,
-  },
-  secret: process.env.NEXTAUTH_SECRET,
-};
+    JWT_SECRET,
+    { expiresIn: JWT_EXPIRY }
+  )
+}
+
+/**
+ * Verify and decode JWT token
+ */
+export const verifyToken = (token: string): { userId: string; role: string } | null => {
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as any
+    return {
+      userId: decoded.userId,
+      role: decoded.role,
+    }
+  } catch (error) {
+    return null
+  }
+}
+
+/**
+ * Extract token from Authorization header
+ */
+export const getTokenFromHeaders = (headers: Headers): string | null => {
+  const auth = headers.get('authorization')
+  if (!auth?.startsWith('Bearer ')) return null
+  return auth.slice(7)
+}
+
+/**
+ * Extract token from cookies
+ */
+export const getTokenFromCookie = (cookieString: string): string | null => {
+  const cookies = cookieString.split(';').map((c) => c.trim())
+  const posCookie = cookies.find((c) => c.startsWith('pos_token='))
+  if (!posCookie) return null
+  return posCookie.split('=')[1]
+}

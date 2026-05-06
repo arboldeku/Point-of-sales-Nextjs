@@ -87,8 +87,8 @@ model Transaction {
 }
 
 model ShopData {
-  id          String          @id @default(cuid())
-  tax Int?
+  id   String  @id @default(cuid())
+  tax  Int?
   name String?
 }
 
