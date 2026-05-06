@@ -84,8 +84,8 @@ function printLabels(labels: LabelEntry[]) {
   /* Left brand block: 18mm = LEFT_W, black fill */
   .lbl-brand {
     width: 18mm; flex-shrink: 0;
-    background: #000;
-    border-right: 1px solid #000;
+    background: #000000;
+    border-right: 1px solid #000000;
     display: flex; flex-direction: column;
     align-items: center; justify-content: center;
     padding: 0 1.5mm; gap: 1.5mm;
@@ -93,13 +93,13 @@ function printLabels(labels: LabelEntry[]) {
   .lbl-brand-name {
     font-family: 'Century Gothic', CenturyGothic, AppleGothic, Arial, sans-serif;
     font-weight: 700; font-size: 9pt;
-    color: #fff; letter-spacing: 0.04em;
+    color: #ffffff; letter-spacing: 0.04em;
     line-height: 1; text-align: center; white-space: nowrap;
   }
   .lbl-brand-sub {
     font-family: 'Century Gothic', CenturyGothic, AppleGothic, Arial, sans-serif;
-    font-weight: 700; font-size: 4pt;
-    color: #fff; letter-spacing: 0.06em;
+    font-weight: 700; font-size: 5pt;
+    color: #ffffff; letter-spacing: 0.06em;
     text-transform: uppercase; text-align: center;
     white-space: nowrap; line-height: 1;
   }
