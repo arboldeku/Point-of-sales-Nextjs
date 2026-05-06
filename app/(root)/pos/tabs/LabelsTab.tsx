@@ -81,9 +81,8 @@ async function printLabels(labels: LabelEntry[]) {
   .name { font-size: 10.5px; font-weight: bold; line-height: 1.2; margin-bottom: 1mm; overflow: hidden; }
   .details { font-size: 8px; color: #555; line-height: 1.4; }
   .spacer { flex: 1; }
-  .bottom { display: flex; justify-content: space-between; align-items: flex-end; }
+  .bottom { display: flex; justify-content: flex-start; align-items: flex-end; }
   .sku { font-size: 6.5px; color: #999; font-family: monospace; }
-  .price { font-size: 16px; font-weight: bold; color: #000; line-height: 1; }
   @media print { .no-print { display: none; } }
 </style>
 </head>
@@ -93,7 +92,6 @@ async function printLabels(labels: LabelEntry[]) {
 ${expanded.map(l => {
   const condTag = l.condition && l.condition !== 'NM' ? ` [${esc(l.condition)}]` : ''
   const details = [l.set_code, l.cn, l.rarity, l.lang].filter(Boolean).map(esc).join(' &middot; ')
-  const price = l.listed_price_eur ? `&euro;${l.listed_price_eur.toFixed(2)}` : ''
   const dmHtml = skuImages[l.sku]
     ? `<img src="${skuImages[l.sku]}" alt="${esc(l.sku)}">`
     : `<div class="no-dm">sin<br>SKU</div>`
@@ -104,7 +102,6 @@ ${expanded.map(l => {
     <div class="spacer"></div>
     <div class="bottom">
       <div class="sku">${esc(l.sku) || '&mdash;'}</div>
-      <div class="price">${price}</div>
     </div>
   </div>
   <div class="label-dm">${dmHtml}</div>
@@ -161,7 +158,7 @@ export default function LabelsTab() {
         if (!name) continue
 
         parsed.push({
-          sku: row['internal_sku'] || row['sku'] || row['product id'] || '',
+          sku: row['internal_sku'] || row['sku'] || row['internal sku'] || row['idproduct'] || row['product id'] || row['article id'] || row['cardmarket_id'] || '',
           name,
           lang: row['lang'] || row['language'] || row['idioma'] || 'ESP',
           set_code: row['set_code'] || row['expansion'] || '',
