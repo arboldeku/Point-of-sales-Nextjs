@@ -15,6 +15,24 @@ type LabelEntry = {
   qty: number
 }
 
+const LANG_MAP: Record<string, string> = {
+  spanish: 'ESP', español: 'ESP', espanol: 'ESP', esp: 'ESP', es: 'ESP', sp: 'ESP',
+  english: 'ENG', inglés: 'ENG', ingles: 'ENG', eng: 'ENG', en: 'ENG',
+  japanese: 'JPN', japonés: 'JPN', japones: 'JPN', jpn: 'JPN', jap: 'JPN', jp: 'JPN', ja: 'JPN',
+  french: 'FRA', francés: 'FRA', frances: 'FRA', fra: 'FRA', fr: 'FRA',
+  german: 'DEU', alemán: 'DEU', aleman: 'DEU', deu: 'DEU', de: 'DEU',
+  italian: 'ITA', italiano: 'ITA', ita: 'ITA', it: 'ITA',
+  portuguese: 'POR', portugués: 'POR', portugues: 'POR', por: 'POR', pt: 'POR',
+  korean: 'KOR', coreano: 'KOR', kor: 'KOR', ko: 'KOR',
+  chinese: 'CHI', chino: 'CHI', chi: 'CHI', zh: 'CHI',
+}
+
+function normalizeLang(raw: string): string {
+  if (!raw) return 'ESP'
+  const key = raw.trim().toLowerCase()
+  return LANG_MAP[key] ?? raw.trim().toUpperCase().slice(0, 3)
+}
+
 function printLabels(labels: LabelEntry[]) {
   const expanded = labels.flatMap(l => Array(l.qty).fill(null).map(() => l))
 
@@ -207,30 +225,76 @@ export default function LabelsTab() {
       if (lines.length < 2) throw new Error('CSV vacío o sin filas de datos')
 
       const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim().toLowerCase())
-      const parsed: LabelEntry[] = []
+
+      // Phase 1: parse rows, keeping cardmarket_id for Supabase lookup
+      type RawEntry = LabelEntry & { _cm_id: string }
+      const raw: RawEntry[] = []
 
       for (let i = 1; i < lines.length; i++) {
         const vals = lines[i].split(',').map(v => v.replace(/^"|"$/g, '').trim())
         const row: Record<string, string> = {}
         headers.forEach((h, idx) => { row[h] = vals[idx] ?? '' })
 
-        const name = row['card_name'] || row['name'] || row['article'] || row['nombre'] || ''
+        const name = row['card_name'] || row['name'] || row['product'] || row['article'] || row['nombre'] || ''
         if (!name) continue
 
-        parsed.push({
-          sku: row['internal_sku'] || row['sku'] || row['internal sku'] || row['idproduct'] || row['product id'] || row['article id'] || row['cardmarket_id'] || '',
+        const cm_id = row['cardmarketid'] || row['idproduct'] || row['product id'] || row['article id'] || row['cardmarket_id'] || ''
+        const lang = normalizeLang(row['lang'] || row['language'] || row['idioma'] || '')
+
+        raw.push({
+          sku: row['internal_sku'] || row['sku'] || row['internal sku'] || '',
           name,
-          lang: row['lang'] || row['language'] || row['idioma'] || 'ESP',
+          lang,
           set_code: row['set_code'] || row['expansion'] || '',
           cn: row['cn'] || row['number'] || null,
           rarity: row['rarity'] || row['rareza'] || null,
-          listed_price_eur: parseFloat(row['listed_price_eur'] || row['price'] || row['article value'] || '0') || null,
+          listed_price_eur: parseFloat(row['listed_price_eur'] || row['price'] || row['price in eur'] || row['article value'] || '0') || null,
           condition: row['condition'] || row['condicion'] || 'NM',
-          qty: parseInt(row['qty'] || row['amount'] || '1') || 1,
+          qty: parseInt(row['qty'] || row['amount'] || row['count'] || '1') || 1,
+          _cm_id: cm_id,
         })
       }
 
-      if (!parsed.length) throw new Error('No se encontraron filas válidas')
+      if (!raw.length) throw new Error('No se encontraron filas válidas')
+
+      // Phase 2: Supabase lookup for rows without internal_sku
+      const needsLookup = raw.filter(r => !r.sku && r._cm_id)
+      if (needsLookup.length > 0) {
+        const cmIds = Array.from(new Set(needsLookup.map(r => r._cm_id)))
+        const { data } = await supabase
+          .from('inventory_current')
+          .select('internal_sku, cardmarket_id, lang, card_name, set_code, cn, rarity, listed_price_eur')
+          .in('cardmarket_id', cmIds as any)
+          .gt('qty', 0)
+
+        if (data) {
+          const skuMap = new Map<string, any>()
+          data.forEach((row: any) => {
+            const key = `${row.cardmarket_id}|${String(row.lang).toUpperCase()}`
+            if (!skuMap.has(key)) skuMap.set(key, row)
+          })
+
+          raw.forEach(r => {
+            if (r.sku || !r._cm_id) return
+            const hit = skuMap.get(`${r._cm_id}|${r.lang}`)
+            if (hit) {
+              r.sku           = hit.internal_sku ?? r._cm_id
+              if (!r.name || r.name === r._cm_id) r.name = hit.card_name ?? r.name
+              if (!r.set_code)    r.set_code = hit.set_code ?? ''
+              if (!r.cn)          r.cn = hit.cn ?? null
+              if (!r.rarity)      r.rarity = hit.rarity ?? null
+              if (!r.listed_price_eur) r.listed_price_eur = hit.listed_price_eur ?? null
+            } else {
+              r.sku = r._cm_id  // fallback: at least show a barcode
+            }
+          })
+        }
+      }
+
+      // Phase 3: for rows still without sku, fall back to cm_id
+      raw.forEach(r => { if (!r.sku) r.sku = r._cm_id })
+
+      const parsed: LabelEntry[] = raw.map(({ _cm_id: _, ...rest }) => rest)
       setCsvLabels(parsed)
     } catch (err: any) {
       setCsvError(err.message)
