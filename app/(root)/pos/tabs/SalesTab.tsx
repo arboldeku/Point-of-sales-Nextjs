@@ -86,7 +86,7 @@ export default function SalesTab() {
   const [cambioDir, setCambioDir] = useState<CambioDir>('recibir')
   const [tradeAmount, setTradeAmount] = useState(0)
   const [discount, setDiscount] = useState(0)
-  const [channel, setChannel] = useState('Iberian')
+  const [channel, setChannel] = useState('SA')
 
   // Daily log (all confirmed sales today, mirrors st.session_state.sales)
   const [dailySales, setDailySales] = useState<ScanEvent[]>([])
@@ -300,7 +300,7 @@ export default function SalesTab() {
           </select>
           <select value={channel} onChange={e => setChannel(e.target.value)}
             className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm">
-            <option>Iberian</option><option>SA</option><option>LIGA</option><option>Online</option>
+            <option>SA</option><option>Cardshow</option><option>Tienda</option><option>Cardmarket</option><option>Otros</option>
           </select>
           <button onClick={toggleTestMode}
             className={`px-2 py-1 rounded text-xs font-semibold transition-colors ${testMode ? 'bg-orange-600 text-white' : 'bg-gray-800 text-gray-500 hover:text-gray-300'}`}>
