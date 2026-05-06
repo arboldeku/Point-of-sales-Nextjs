@@ -51,60 +51,77 @@ function printLabels(labels: LabelEntry[]) {
   .no-print { padding: 8px 12px; background: #f0f0f0; font-size: 12px; border-bottom: 1px solid #ddd; }
   .grid { display: flex; flex-wrap: wrap; gap: 2mm; padding: 2mm; }
 
+  /* Exact dimensions from prisma-scan core/labels.py:
+     LBL_W=60mm LBL_H=30mm TOP_H=13mm LEFT_W=18mm BC_H=15mm */
   .label {
-    width: 63mm; height: 28mm;
-    border: 1px solid #111;
+    width: 60mm; height: 30mm;
+    border: 1px solid #000;
     display: flex; flex-direction: column;
     overflow: hidden; page-break-inside: avoid; background: white;
   }
 
-  /* Top section: brand left + info right */
+  /* Top section: 13mm tall = TOP_H */
   .lbl-top {
-    flex: 1; display: flex; flex-direction: row; overflow: hidden;
+    height: 13mm; flex-shrink: 0;
+    display: flex; flex-direction: row; overflow: hidden;
   }
 
-  /* Left brand block */
+  /* Left brand block: 18mm = LEFT_W, black fill */
   .lbl-brand {
     width: 18mm; flex-shrink: 0;
     background: #000;
+    border-right: 1px solid #000;
     display: flex; flex-direction: column;
     align-items: center; justify-content: center;
-    padding: 2px 2px; gap: 2px;
+    padding: 0 1.5mm; gap: 1.5mm;
   }
   .lbl-brand-name {
-    font-weight: 900; font-size: 13px; letter-spacing: 0.06em;
-    text-transform: uppercase; color: #ffffff; line-height: 1;
+    font-family: Arial, sans-serif;
+    font-weight: 900; font-size: 13pt;
+    color: #fff; letter-spacing: 0.02em;
+    line-height: 1; text-align: center; white-space: nowrap;
   }
   .lbl-brand-sub {
-    font-size: 4px; color: #cccccc; letter-spacing: 0.06em;
-    text-transform: uppercase; text-align: center; line-height: 1.3;
+    font-family: Arial, sans-serif;
+    font-weight: 700; font-size: 5.5pt;
+    color: #bbb; letter-spacing: 0.1em;
+    text-transform: uppercase; text-align: center;
+    white-space: nowrap; line-height: 1;
   }
 
-  /* Right info block */
+  /* Right info block: Helvetica-BoldOblique 9pt / Helvetica-Bold 8pt */
   .lbl-info {
     flex: 1; display: flex; flex-direction: column;
-    justify-content: center; padding: 2px 5px; gap: 1.5px;
-    background: #ffffff;
+    justify-content: space-evenly;
+    padding: 1mm 1mm 1mm 2mm;
+    background: #fff;
   }
   .lbl-name {
-    font-style: italic; font-weight: 700; font-size: 9px;
-    color: #000; line-height: 1.2;
+    font-family: Arial, sans-serif;
+    font-style: italic; font-weight: bold; font-size: 9pt;
+    color: #000; line-height: 1;
+    white-space: nowrap; overflow: hidden;
   }
   .lbl-set {
-    font-size: 7.5px; color: #222; font-weight: 400;
+    font-family: Arial, sans-serif;
+    font-weight: bold; font-size: 8pt;
+    color: #000; line-height: 1;
   }
   .lbl-sku {
-    font-size: 7.5px; color: #222; font-weight: 400;
+    font-family: Arial, sans-serif;
+    font-weight: bold; font-size: 8pt;
+    color: #000; line-height: 1;
   }
 
-  /* Barcode full-width bottom */
+  /* Barcode section: remaining 17mm (30mm - 13mm), BC_H=15mm centered */
   .lbl-barcode {
-    border-top: 1px solid #111;
-    padding: 0 2px;
+    flex: 1;
+    border-top: 1px solid #000;
+    padding: 1mm 2mm;
     display: flex; align-items: center; justify-content: center;
-    background: #ffffff; flex-shrink: 0; height: 11mm;
+    background: #fff;
   }
-  .lbl-barcode svg { width: 100%; height: 100%; }
+  .lbl-barcode svg { display: block; width: 100%; height: 100%; }
 
   @media print { .no-print { display: none; } }
 </style>
