@@ -77,14 +77,14 @@ function printLabels(labels: LabelEntry[]) {
   }
   .lbl-brand-name {
     font-family: Arial, sans-serif;
-    font-weight: 900; font-size: 13pt;
-    color: #fff; letter-spacing: 0.02em;
+    font-weight: 900; font-size: 10pt;
+    color: #fff; letter-spacing: 0.04em;
     line-height: 1; text-align: center; white-space: nowrap;
   }
   .lbl-brand-sub {
     font-family: Arial, sans-serif;
-    font-weight: 700; font-size: 5.5pt;
-    color: #bbb; letter-spacing: 0.1em;
+    font-weight: 700; font-size: 4.8pt;
+    color: #bbb; letter-spacing: 0.06em;
     text-transform: uppercase; text-align: center;
     white-space: nowrap; line-height: 1;
   }
@@ -153,8 +153,19 @@ ${expanded.map((l, i) => {
 <script>
 var barcodes = ${barcodeData};
 window.onload = function() {
-  var opts = {format:"CODE128",width:1.4,height:30,displayValue:false,margin:0,background:"#ffffff",lineColor:"#000000"};
-  barcodes.forEach(function(b) { if (b.val) try { JsBarcode('#'+b.id, b.val, opts); } catch(e) {} });
+  var opts = {format:"CODE128",width:1.4,height:50,displayValue:false,margin:0,background:"#ffffff",lineColor:"#000000"};
+  barcodes.forEach(function(b) {
+    if (!b.val) return;
+    try {
+      JsBarcode('#'+b.id, b.val, opts);
+      var svg = document.getElementById(b.id);
+      if (svg) {
+        svg.removeAttribute('width');
+        svg.removeAttribute('height');
+        svg.setAttribute('preserveAspectRatio', 'none');
+      }
+    } catch(e) {}
+  });
   setTimeout(function() { window.print(); }, 500);
 };
 <\/script>
