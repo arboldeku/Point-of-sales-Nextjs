@@ -35,9 +35,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null)
   const [token, setToken] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [mounted, setMounted] = useState(false)
 
   // Check if user is already logged in (from localStorage)
+  // Only runs on client after hydration
   useEffect(() => {
+    setMounted(true)
     const storedToken = localStorage.getItem('pos_token')
     const storedUser = localStorage.getItem('pos_user')
 
