@@ -2,6 +2,16 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react'
 
+// Helper to set cookie
+const setCookie = (name: string, value: string) => {
+  document.cookie = `${name}=${value}; path=/; max-age=604800`
+}
+
+// Helper to delete cookie
+const deleteCookie = (name: string) => {
+  document.cookie = `${name}=; path=/; max-age=0`
+}
+
 interface User {
   id: string
   username: string
@@ -59,6 +69,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       localStorage.setItem('pos_token', data.token)
       localStorage.setItem('pos_user', JSON.stringify(data.user))
+      setCookie('pos_token', data.token)
     } finally {
       setLoading(false)
     }
@@ -82,7 +93,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setToken(null)
       localStorage.removeItem('pos_token')
       localStorage.removeItem('pos_user')
+      deleteCookie('pos_token')
       setLoading(false)
+      window.location.href = '/login'
     }
   }
 
