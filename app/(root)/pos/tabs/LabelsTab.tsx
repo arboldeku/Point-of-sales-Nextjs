@@ -76,14 +76,14 @@ function printLabels(labels: LabelEntry[]) {
     padding: 0 1.5mm; gap: 1.5mm;
   }
   .lbl-brand-name {
-    font-family: Arial, sans-serif;
-    font-weight: 900; font-size: 10pt;
+    font-family: 'Century Gothic', CenturyGothic, AppleGothic, Arial, sans-serif;
+    font-weight: 700; font-size: 9pt;
     color: #fff; letter-spacing: 0.04em;
     line-height: 1; text-align: center; white-space: nowrap;
   }
   .lbl-brand-sub {
-    font-family: Arial, sans-serif;
-    font-weight: 700; font-size: 4.8pt;
+    font-family: 'Century Gothic', CenturyGothic, AppleGothic, Arial, sans-serif;
+    font-weight: 700; font-size: 4pt;
     color: #bbb; letter-spacing: 0.06em;
     text-transform: uppercase; text-align: center;
     white-space: nowrap; line-height: 1;
