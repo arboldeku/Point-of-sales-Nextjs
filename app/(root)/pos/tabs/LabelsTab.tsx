@@ -15,100 +15,160 @@ type LabelEntry = {
   qty: number
 }
 
-async function printLabels(labels: LabelEntry[]) {
+function printLabels(labels: LabelEntry[]) {
   const expanded = labels.flatMap(l => Array(l.qty).fill(null).map(() => l))
 
-  // Dynamic import — ensures bwip-js only runs in browser context (no SSR)
-  let bwipjs: any
-  try {
-    bwipjs = (await import('bwip-js')).default
-  } catch {
-    bwipjs = null
-  }
-
-  // Pre-generate DataMatrix data URLs for unique SKUs
-  const skuImages: Record<string, string> = {}
-  const uniqueSkus = Array.from(new Set(expanded.map(l => l.sku).filter(Boolean)))
-  for (const sku of uniqueSkus) {
-    if (!bwipjs) break
-    try {
-      const canvas = document.createElement('canvas')
-      bwipjs.toCanvas(canvas, { bcid: 'datamatrix', text: sku, scale: 4, paddingwidth: 1, paddingheight: 1 })
-      const url = canvas.toDataURL('image/png')
-      if (url) skuImages[sku] = url
-    } catch {
-      // individual SKU failed — skip
-    }
-  }
-
-  // Use HTML entities for all non-ASCII chars to avoid document.write encoding issues
   const esc = (s: string | null | undefined) =>
     (s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+  // Rarity string → CSS class (matches label_preview.html classes)
+  function rarityClass(r: string | null): string {
+    if (!r) return 'c'
+    const v = r.toLowerCase()
+    if (v.includes('double') || v === 'rr') return 'rr'
+    if (v.includes('special') && v.includes('art')) return 'sar'
+    if (v.includes('special') && v.includes('illus')) return 'sar'
+    if (v.includes('hyper') || v.includes('rainbow')) return 'hr'
+    if (v.includes('illus')) return 'ir'
+    if (v.includes('ultra') || v === 'ur') return 'ur'
+    if (v.includes('art') || v === 'ar') return 'ar'
+    return 'c'
+  }
+
+  // Lang → CSS class
+  function langClass(lang: string): string {
+    const l = lang.toUpperCase()
+    if (l === 'ENG') return 'lang-eng'
+    if (l === 'ESP') return 'lang-esp'
+    if (l === 'JPN') return 'lang-jpn'
+    return 'lang-other'
+  }
+
+  // Strip trailing lang suffix added by addToQueue ("Charizard ex ENG Rev" → "Charizard ex")
+  function displayName(l: LabelEntry): string {
+    return l.name
+      .replace(new RegExp(`\\s+${l.lang}(\\s+Rev)?\\s*$`, 'i'), '')
+      .replace(/\s+Rev\s*$/i, '')
+      .trim() || l.name
+  }
+
+  // Barcode data for JsBarcode (embedded as JSON to avoid script injection)
+  const barcodeData = JSON.stringify(
+    expanded.map((l, i) => ({ id: `bc${i}`, val: l.sku || '' }))
+  )
 
   const html = `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>
 <style>
-  @page { size: A4; margin: 8mm; }
-  * { box-sizing: border-box; }
-  body { font-family: Arial, Helvetica, sans-serif; font-size: 9px; margin: 0; background: #fff; color: #000; }
+  @page { size: A4; margin: 5mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; background: white; }
   .no-print { padding: 8px 12px; background: #f0f0f0; font-size: 12px; border-bottom: 1px solid #ddd; }
-  .grid { display: flex; flex-wrap: wrap; gap: 2mm; padding: 2mm; }
+  .grid { display: flex; flex-wrap: wrap; gap: 1.5mm; padding: 1mm; }
+
   .label {
-    width: 88mm; height: 32mm;
-    border: 1px solid #999;
-    display: flex; flex-direction: row;
-    overflow: hidden; page-break-inside: avoid;
+    width: 60mm; height: 30mm;
+    border: 0.5px solid #ccc; border-radius: 2px;
+    display: flex; flex-direction: column;
+    overflow: hidden; page-break-inside: avoid; background: white;
   }
-  .label-text {
-    flex: 1; min-width: 0;
-    padding: 3mm 2mm 3mm 3mm;
-    display: flex; flex-direction: column; justify-content: space-between;
-    border-right: 1px solid #ccc;
+
+  /* Black header */
+  .lbl-header {
+    background: #111; padding: 2px 6px;
+    display: flex; align-items: center; justify-content: space-between;
+    flex-shrink: 0; height: 7mm;
   }
-  .label-dm {
-    width: 26mm; flex-shrink: 0;
-    display: flex; align-items: center; justify-content: center;
-    padding: 2mm;
+  .lbl-store {
+    font-weight: 900; font-size: 8.5px; letter-spacing: 0.18em;
+    text-transform: uppercase; color: #f0c040;
   }
-  .label-dm img { width: 22mm; height: 22mm; image-rendering: pixelated; display: block; }
-  .label-dm .no-dm {
-    width: 22mm; height: 22mm; border: 1px dashed #bbb;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 6px; color: #aaa; text-align: center;
+  .lbl-category { font-size: 5.5px; color: #999; letter-spacing: 0.03em; }
+
+  /* Body */
+  .lbl-body {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 2px 6px; text-align: center; gap: 1.5px;
   }
-  .name { font-size: 10.5px; font-weight: bold; line-height: 1.2; margin-bottom: 1mm; overflow: hidden; }
-  .details { font-size: 8px; color: #555; line-height: 1.4; }
-  .spacer { flex: 1; }
-  .bottom { display: flex; justify-content: flex-start; align-items: flex-end; }
-  .sku { font-size: 6.5px; color: #999; font-family: monospace; }
+  .lbl-top-row { display: flex; align-items: center; justify-content: center; gap: 4px; }
+  .lbl-name { font-weight: 800; font-size: 9.5px; color: #111; letter-spacing: -0.01em; line-height: 1.1; }
+  .lbl-lang {
+    font-size: 5.5px; font-weight: 700; letter-spacing: 0.06em;
+    padding: 1px 3px; border-radius: 2px; flex-shrink: 0;
+  }
+  .lang-eng { background: #1a3a6a; color: #60b0ff; border: 0.5px solid #2a5aaa; }
+  .lang-esp { background: #6a1a1a; color: #ff6060; border: 0.5px solid #aa2a2a; }
+  .lang-jpn { background: #1a4a2a; color: #40d080; border: 0.5px solid #2a6a3a; }
+  .lang-other { background: #444; color: #ccc; border: 0.5px solid #666; }
+
+  .lbl-set { font-family: 'Courier New', monospace; font-size: 6.5px; color: #666; }
+
+  .lbl-rarity {
+    display: inline-flex; align-items: center; gap: 2px;
+    font-size: 5.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+    padding: 1px 4px; border-radius: 2px;
+  }
+  .rdot { width: 4px; height: 4px; border-radius: 50%; flex-shrink: 0; }
+  .rr  { background: #fff3cd; color: #7a5a00; border: 0.5px solid #e0c050; } .rr  .rdot { background: #d4a000; }
+  .ur  { background: #f3e8ff; color: #6a1a8a; border: 0.5px solid #c070e0; } .ur  .rdot { background: #9030b0; }
+  .ir  { background: #e8f4ff; color: #1a4a8a; border: 0.5px solid #5090d0; } .ir  .rdot { background: #2060a0; }
+  .sar { background: #fff0e8; color: #8a3a00; border: 0.5px solid #e08040; } .sar .rdot { background: #c05010; }
+  .hr  { background: #e8fff0; color: #005a30; border: 0.5px solid #40c070; } .hr  .rdot { background: #009040; }
+  .ar  { background: #f0f0ff; color: #2a2a8a; border: 0.5px solid #7070c0; } .ar  .rdot { background: #4040a0; }
+  .c   { background: #f5f5f5; color: #555;    border: 0.5px solid #bbb;    } .c   .rdot { background: #888; }
+
+  /* Barcode */
+  .lbl-barcode {
+    border-top: 0.5px solid #e8e8e8;
+    padding: 1px 5px 2px;
+    display: flex; flex-direction: column; align-items: center; flex-shrink: 0;
+  }
+  .lbl-barcode svg { max-width: 100%; height: 13px; }
+  .lbl-sku { font-family: 'Courier New', monospace; font-size: 5.5px; color: #444; letter-spacing: 0.1em; margin-top: 1px; }
+
   @media print { .no-print { display: none; } }
 </style>
 </head>
 <body>
-<div class="no-print"><strong>${expanded.length} etiqueta${expanded.length !== 1 ? 's' : ''}</strong> &mdash; Ctrl+P para imprimir &bull; Cierra esta ventana cuando acabes</div>
+<div class="no-print"><strong>${expanded.length} etiqueta${expanded.length !== 1 ? 's' : ''}</strong> &mdash; Ctrl+P para imprimir</div>
 <div class="grid">
-${expanded.map(l => {
-  const condTag = l.condition && l.condition !== 'NM' ? ` [${esc(l.condition)}]` : ''
-  const details = [l.set_code, l.cn, l.rarity, l.lang].filter(Boolean).map(esc).join(' &middot; ')
-  const dmHtml = skuImages[l.sku]
-    ? `<img src="${skuImages[l.sku]}" alt="${esc(l.sku)}">`
-    : `<div class="no-dm">sin<br>SKU</div>`
+${expanded.map((l, i) => {
+  const rc = rarityClass(l.rarity)
+  const lc = langClass(l.lang)
+  const dn = esc(displayName(l))
+  const setLine = [l.set_code, l.cn].filter(Boolean).map(esc).join(' &middot; ')
   return `<div class="label">
-  <div class="label-text">
-    <div class="name">${esc(l.name)}${condTag}</div>
-    <div class="details">${details}</div>
-    <div class="spacer"></div>
-    <div class="bottom">
-      <div class="sku">${esc(l.sku) || '&mdash;'}</div>
-    </div>
+  <div class="lbl-header">
+    <span class="lbl-store">Prisma</span>
+    <span class="lbl-category">Pok&eacute;mon TCG &middot; Single</span>
   </div>
-  <div class="label-dm">${dmHtml}</div>
+  <div class="lbl-body">
+    <div class="lbl-top-row">
+      <span class="lbl-name">${dn}</span>
+      <span class="lbl-lang ${lc}">${esc(l.lang)}</span>
+    </div>
+    <div class="lbl-set">${setLine}</div>
+    ${l.rarity ? `<span class="lbl-rarity ${rc}"><span class="rdot"></span>${esc(l.rarity)}</span>` : ''}
+  </div>
+  <div class="lbl-barcode">
+    <svg id="bc${i}"></svg>
+    <span class="lbl-sku">${l.sku ? esc(l.sku) : '&mdash;'}</span>
+  </div>
 </div>`
 }).join('\n')}
 </div>
-<script>window.onload = function() { setTimeout(function() { window.print(); }, 500); }<\/script>
+<script>
+var barcodes = ${barcodeData};
+window.onload = function() {
+  var opts = {format:"CODE128",width:1.2,height:13,displayValue:false,margin:0,background:"#ffffff",lineColor:"#000000"};
+  barcodes.forEach(function(b) { if (b.val) try { JsBarcode('#'+b.id, b.val, opts); } catch(e) {} });
+  setTimeout(function() { window.print(); }, 500);
+};
+<\/script>
 </body>
 </html>`
 
@@ -282,7 +342,7 @@ export default function LabelsTab() {
                 <span className="text-gray-400 text-sm">
                   {csvLabels.length} carta{csvLabels.length !== 1 ? 's' : ''} · {totalCsvLabels} etiqueta{totalCsvLabels !== 1 ? 's' : ''}
                 </span>
-                <button onClick={() => void printLabels(csvLabels)}
+                <button onClick={() => printLabels(csvLabels)}
                   className="bg-green-700 hover:bg-green-600 px-4 py-2 rounded-lg text-sm font-bold transition-colors">
                   🖨️ Imprimir etiquetas
                 </button>
@@ -407,7 +467,7 @@ export default function LabelsTab() {
                       Total: {totalSelectedLabels} etiqueta{totalSelectedLabels !== 1 ? 's' : ''}
                     </div>
                     <button
-                      onClick={() => void printLabels(selectedLabels)}
+                      onClick={() => printLabels(selectedLabels)}
                       className="w-full bg-green-700 hover:bg-green-600 rounded-lg py-2 text-xs font-bold transition-colors text-white"
                     >
                       🖨️ Generar PDF
