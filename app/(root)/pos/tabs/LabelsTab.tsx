@@ -93,13 +93,13 @@ function printLabels(labels: LabelEntry[]) {
   .lbl-brand-name {
     font-family: 'Century Gothic', CenturyGothic, AppleGothic, Arial, sans-serif;
     font-weight: 700; font-size: 9pt;
-    color: #000; letter-spacing: 0.04em;
+    color: #fff; letter-spacing: 0.04em;
     line-height: 1; text-align: center; white-space: nowrap;
   }
   .lbl-brand-sub {
     font-family: 'Century Gothic', CenturyGothic, AppleGothic, Arial, sans-serif;
     font-weight: 700; font-size: 4pt;
-    color: #000; letter-spacing: 0.06em;
+    color: #fff; letter-spacing: 0.06em;
     text-transform: uppercase; text-align: center;
     white-space: nowrap; line-height: 1;
   }
@@ -148,6 +148,9 @@ function printLabels(labels: LabelEntry[]) {
       overflow: hidden; page-break-after: always;
     }
     .label:last-child { page-break-after: auto; }
+    .lbl-barcode {
+      padding: 3mm 2mm 0.2mm 2mm;
+    }
   }
 </style>
 </head>
