@@ -19,7 +19,11 @@ function parseDate(s: string): Date | null {
   }
   const dmy = s.match(/^(\d{1,2})\s+([A-Za-z]{3,})\s+(\d{2,4})$/)
   if (dmy) {
-    const year = dmy[3].length === 2 ? `20${dmy[3]}` : dmy[3]
+    let year = dmy[3]
+    if (dmy[3].length === 2) {
+      const yy = parseInt(dmy[3])
+      year = yy >= 90 ? `19${dmy[3]}` : `20${dmy[3]}`
+    }
     const d = new Date(`${dmy[2]} ${dmy[1]} ${year}`)
     return isNaN(d.getTime()) ? null : d
   }
