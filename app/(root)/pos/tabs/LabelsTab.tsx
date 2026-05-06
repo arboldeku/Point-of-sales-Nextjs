@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { supabase, type InventoryCard } from '@/lib/supabase'
 
 type LabelEntry = {
@@ -33,28 +33,8 @@ function normalizeLang(raw: string): string {
   return LANG_MAP[key] ?? raw.trim().toUpperCase().slice(0, 3)
 }
 
-async function printLabels(labels: LabelEntry[]) {
-  // 1. Fetch release dates for sort
-  let dateMap: Record<string, number> = {}
-  try {
-    const res = await fetch('/api/release-dates')
-    if (res.ok) dateMap = await res.json()
-  } catch { /* Drive not mounted or offline — labels print in original order */ }
-
-  // 2. Sort: newest expansion first, then CN ascending within set
-  const sorted = [...labels].sort((a, b) => {
-    const da = dateMap[a.set_code.toUpperCase()]
-    const db = dateMap[b.set_code.toUpperCase()]
-    const ta = da != null ? -da : 1e15   // unknown sets go to end
-    const tb = db != null ? -db : 1e15
-    if (ta !== tb) return ta - tb
-    const ca = parseInt(a.cn?.match(/(\d+)/)?.[1] ?? '9999')
-    const cb = parseInt(b.cn?.match(/(\d+)/)?.[1] ?? '9999')
-    return ca - cb
-  })
-
-  // 3. Expand by qty after sort
-  const expanded = sorted.flatMap(l => Array(l.qty).fill(null).map(() => l))
+function printLabels(labels: LabelEntry[]) {
+  const expanded = labels.flatMap(l => Array(l.qty).fill(null).map(() => l))
 
   const esc = (s: string | null | undefined) =>
     (s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -158,14 +138,14 @@ async function printLabels(labels: LabelEntry[]) {
   }
   .lbl-barcode svg { display: block; width: 100%; height: 100%; }
 
-  /* Print: each label fills the 60×30mm page exactly */
+  /* Print: each label = one 60×30mm page, no overflow */
   @media print {
     .no-print { display: none; }
     body { background: white; display: block; padding: 0; }
     .label {
-      width: 100%; height: 100%;
+      width: 60mm; height: 30mm;
       margin: 0; border: none; box-shadow: none;
-      page-break-after: always;
+      overflow: hidden; page-break-after: always;
     }
     .label:last-child { page-break-after: auto; }
   }
@@ -228,6 +208,7 @@ export default function LabelsTab() {
   const [csvLabels, setCsvLabels] = useState<LabelEntry[]>([])
   const [csvError, setCsvError] = useState('')
   const [csvFileName, setCsvFileName] = useState('')
+  const [loteLoading, setLoteLoading] = useState(false)
 
   const [searchInput, setSearchInput] = useState('')
   const [filterSet, setFilterSet] = useState('')
@@ -238,6 +219,63 @@ export default function LabelsTab() {
   const [selectedLabels, setSelectedLabels] = useState<LabelEntry[]>([])
   const [game, setGame] = useState('pokemon')
   const [autocompleteLoading, setAutocompleteLoading] = useState(false)
+
+  // Release dates fetched once on mount — used by sortLabels
+  const [dateMap, setDateMap] = useState<Record<string, number>>({})
+  useEffect(() => {
+    fetch('/api/release-dates')
+      .then(r => r.ok ? r.json() : {})
+      .then(setDateMap)
+      .catch(() => {})
+  }, [])
+
+  function sortLabels(labels: LabelEntry[]): LabelEntry[] {
+    return [...labels].sort((a, b) => {
+      const da = dateMap[a.set_code.toUpperCase()]
+      const db = dateMap[b.set_code.toUpperCase()]
+      const ta = da != null ? -da : 1e15   // unknown sets go to end
+      const tb = db != null ? -db : 1e15
+      if (ta !== tb) return ta - tb
+      const ca = parseInt(a.cn?.match(/(\d+)/)?.[1] ?? '9999')
+      const cb = parseInt(b.cn?.match(/(\d+)/)?.[1] ?? '9999')
+      return ca - cb
+    })
+  }
+
+  const loadLoteDeHoy = async () => {
+    setLoteLoading(true); setCsvError(''); setCsvLabels([]); setCsvFileName('')
+    try {
+      const today = new Date().toISOString().split('T')[0]
+      const { data, error } = await supabase
+        .from('inventory_current')
+        .select('*')
+        .eq('game', game)
+        .gte('last_updated', today + 'T00:00:00')
+        .lt('last_updated', today + 'T23:59:59.999')
+        .gt('qty', 0)
+        .order('set_code').order('cn')
+
+      if (error) throw new Error(`Supabase: ${error.message}`)
+      if (!data?.length) throw new Error(`No hay cartas con last_updated = hoy (${today})`)
+
+      const labels: LabelEntry[] = (data as InventoryCard[]).map(c => ({
+        sku: c.internal_sku,
+        name: `${c.card_name} ${c.lang}${c.is_reverse ? ' Rev' : ''}`,
+        lang: c.lang,
+        set_code: c.set_code,
+        cn: c.cn,
+        rarity: c.rarity,
+        listed_price_eur: c.listed_price_eur,
+        condition: null,
+        qty: 1,
+      }))
+      setCsvLabels(labels)
+      setCsvFileName(`Lote ${today} (${labels.length} cartas)`)
+    } catch (err: any) {
+      setCsvError(err.message)
+    }
+    setLoteLoading(false)
+  }
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -405,18 +443,24 @@ export default function LabelsTab() {
 
       {mode === 'csv' && (
         <div className="flex flex-col gap-4 flex-1 overflow-hidden">
-          <div className="border-2 border-dashed border-gray-700 rounded-xl p-6 text-center shrink-0">
-            <label className="cursor-pointer">
-              <input type="file" accept=".csv" onChange={handleFile} className="hidden" />
-              <div className="text-3xl mb-2">📄</div>
-              <div className="text-gray-300 font-medium">{csvFileName || 'Subir CSV'}</div>
-              <div className="text-gray-500 text-xs mt-1">
-                Acepta exportaciones Cardmarket o CSV con columna <code>internal_sku</code>
-              </div>
-              <div className="mt-3 bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg text-sm inline-block">
-                Seleccionar archivo
-              </div>
-            </label>
+          <div className="flex gap-2 shrink-0">
+            <div className="flex-1 border-2 border-dashed border-gray-700 rounded-xl p-4 text-center">
+              <label className="cursor-pointer">
+                <input type="file" accept=".csv" onChange={handleFile} className="hidden" />
+                <div className="text-gray-300 font-medium text-sm">{csvFileName || '📄 Subir CSV'}</div>
+                <div className="text-gray-500 text-xs mt-1">Cardmarket o CSV con <code>internal_sku</code></div>
+                <div className="mt-2 bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-lg text-xs inline-block">
+                  Seleccionar archivo
+                </div>
+              </label>
+            </div>
+            <button
+              onClick={loadLoteDeHoy}
+              disabled={loteLoading}
+              className="flex flex-col items-center justify-center gap-1 px-4 py-3 bg-amber-700 hover:bg-amber-600 disabled:bg-gray-700 rounded-xl text-sm font-bold transition-colors shrink-0 min-w-[110px]">
+              <span className="text-lg">📦</span>
+              <span>{loteLoading ? 'Cargando…' : 'Lote de hoy'}</span>
+            </button>
           </div>
 
           {csvError && (
@@ -431,7 +475,7 @@ export default function LabelsTab() {
                 <span className="text-gray-400 text-sm">
                   {csvLabels.length} carta{csvLabels.length !== 1 ? 's' : ''} · {totalCsvLabels} etiqueta{totalCsvLabels !== 1 ? 's' : ''}
                 </span>
-                <button onClick={() => printLabels(csvLabels)}
+                <button onClick={() => printLabels(sortLabels(csvLabels))}
                   className="bg-green-700 hover:bg-green-600 px-4 py-2 rounded-lg text-sm font-bold transition-colors">
                   🖨️ Imprimir etiquetas
                 </button>
