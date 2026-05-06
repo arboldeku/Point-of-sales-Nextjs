@@ -141,10 +141,10 @@ function printLabels(labels: LabelEntry[]) {
   /* Print: each label = one 60×30mm page, no overflow */
   @media print {
     .no-print { display: none; }
-    body { background: white; display: block; padding: 0; }
+    body { background: white; display: block; padding: 0; margin: 0; }
     .label {
       width: 60mm; height: 30mm;
-      margin: 0; border: none; box-shadow: none;
+      margin: 0 0 2mm 0; border: none; box-shadow: none;
       overflow: hidden; page-break-after: always;
     }
     .label:last-child { page-break-after: auto; }
