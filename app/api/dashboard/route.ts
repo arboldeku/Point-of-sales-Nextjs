@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
+import { requirePermission } from '@/lib/auth-middleware';
 
 // Initialize Prisma client
 const prisma = new PrismaClient();
 
 // Handler function for GET request
 export async function GET(req: NextRequest) {
+  const auth = await requirePermission(req, 'VIEW_REPORTS', 'Dashboard')
+  if (!auth.ok) return auth.response
+
   try {
     // Aggregate total stock
     const totalStock = await prisma.productStock.aggregate({

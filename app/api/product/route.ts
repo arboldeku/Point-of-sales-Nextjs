@@ -1,6 +1,7 @@
 import { CatProduct, PrismaClient } from '@prisma/client';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
+import { requirePermission } from '@/lib/auth-middleware';
 
 // Initialize Prisma client
 const prisma = new PrismaClient();
@@ -29,7 +30,10 @@ const generateUniqueId = async () => {
 };
 
 // Handler function for POST request to create a new product
-export const POST = async (request: Request) => {
+export const POST = async (request: NextRequest) => {
+  const auth = await requirePermission(request, 'CREATE_PRODUCT', 'Product')
+  if (!auth.ok) return auth.response
+
   try {
     // Generate a unique ID for the new product
     const customId = await generateUniqueId();

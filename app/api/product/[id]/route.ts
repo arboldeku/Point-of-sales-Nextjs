@@ -1,5 +1,6 @@
 import { CatProduct, PrismaClient } from '@prisma/client';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { requirePermission } from '@/lib/auth-middleware';
 
 // Initialize Prisma client
 const prisma = new PrismaClient();
@@ -51,9 +52,12 @@ export const PATCH = async (
 
 // Handler function for DELETE request
 export const DELETE = async (
-  request: Request,
+  request: NextRequest,
   { params }: { params: { id: string } }
 ) => {
+  const auth = await requirePermission(request, 'DELETE_PRODUCT', 'Product', params.id)
+  if (!auth.ok) return auth.response
+
   try {
     // Delete the product with the specified id
     const product = await prisma.productStock.delete({

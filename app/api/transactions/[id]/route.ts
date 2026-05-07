@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
+import { requirePermission } from '@/lib/auth-middleware';
 
 const prisma = new PrismaClient();
 
@@ -148,9 +149,12 @@ export const PATCH = async (
 
 // DELETE request handler to delete a transaction
 export const DELETE = async (
-  request: Request,
+  request: NextRequest,
   { params }: { params: { id: string } }
 ) => {
+  const auth = await requirePermission(request, 'DELETE_TRANSACTION', 'Transaction', params.id)
+  if (!auth.ok) return auth.response
+
   try {
     // Delete transaction by id
     const transaction = await prisma.transaction.delete({

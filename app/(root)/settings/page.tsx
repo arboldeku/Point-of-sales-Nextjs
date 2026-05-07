@@ -186,46 +186,99 @@ function UsersPanel({ token }: { token: string }) {
 function AuditPanel({ token }: { token: string }) {
   const [audit, setAudit] = useState<AuditRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [filterAction, setFilterAction] = useState('')
+  const [filterResult, setFilterResult] = useState('')
+  const [filterDateFrom, setFilterDateFrom] = useState('')
+  const [filterDateTo, setFilterDateTo] = useState('')
 
-  useEffect(() => {
-    fetch('/api/admin/audit', { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json())
-      .then(d => { setAudit(d.audit || []); setLoading(false) })
-  }, [token])
+  const load = useCallback(async () => {
+    setLoading(true)
+    const params = new URLSearchParams()
+    if (filterAction)   params.set('action', filterAction)
+    if (filterResult)   params.set('result', filterResult)
+    if (filterDateFrom) params.set('date_from', filterDateFrom)
+    if (filterDateTo)   params.set('date_to', filterDateTo + 'T23:59:59Z')
+    const res = await fetch(`/api/admin/audit?${params}`, { headers: { Authorization: `Bearer ${token}` } })
+    const data = await res.json()
+    setAudit(data.audit || [])
+    setLoading(false)
+  }, [token, filterAction, filterResult, filterDateFrom, filterDateTo])
+
+  useEffect(() => { load() }, [load])
+
+  const ACTIONS = ['SELL_PRODUCT', 'APPLY_DISCOUNT_ON_SALE', 'CREATE_PRODUCT', 'DELETE_PRODUCT',
+    'CREATE_USER', 'DELETE_USER', 'VIEW_REPORTS', 'MODIFY_REPORTS', 'VIEW_TRANSACTIONS',
+    'DELETE_TRANSACTION', 'LOGIN', 'LOGOUT']
+
+  const denied  = audit.filter(a => a.permission_check === 'DENIED').length
+  const allowed = audit.filter(a => a.permission_check === 'ALLOWED').length
 
   return (
-    <div className="bg-gray-800 rounded-xl overflow-hidden">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-gray-700 text-gray-400 text-xs">
-            <th className="text-left px-4 py-3">Fecha</th>
-            <th className="text-left px-4 py-3">Usuario</th>
-            <th className="text-left px-4 py-3">Acción</th>
-            <th className="text-left px-4 py-3">Recurso</th>
-            <th className="text-left px-4 py-3">Resultado</th>
-          </tr>
-        </thead>
-        <tbody>
-          {loading ? (
-            <tr><td colSpan={5} className="text-center py-8 text-gray-500">Cargando...</td></tr>
-          ) : audit.length === 0 ? (
-            <tr><td colSpan={5} className="text-center py-8 text-gray-500">Sin registros todavía</td></tr>
-          ) : audit.map(a => (
-            <tr key={a.id} className="border-b border-gray-700/50 hover:bg-gray-700/30">
-              <td className="px-4 py-3 text-gray-400 text-xs">{fmt(a.timestamp)}</td>
-              <td className="px-4 py-3 font-medium text-xs">{a.users?.username ?? '—'}</td>
-              <td className="px-4 py-3 font-mono text-xs text-purple-300">{a.action}</td>
-              <td className="px-4 py-3 text-gray-400 text-xs">{a.resource_type}</td>
-              <td className="px-4 py-3">
-                {a.permission_check === 'ALLOWED'
-                  ? <span className="text-green-400 text-xs font-semibold">✅ OK</span>
-                  : <span className="text-red-400 text-xs font-semibold">❌ Denegado</span>
-                }
-              </td>
+    <div className="space-y-4">
+      {/* Filters */}
+      <div className="bg-gray-800 rounded-xl p-4 space-y-3">
+        <h2 className="text-sm font-semibold text-gray-300">Filtros</h2>
+        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+          <select value={filterAction} onChange={e => setFilterAction(e.target.value)}
+            className="bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-500">
+            <option value="">Todas las acciones</option>
+            {ACTIONS.map(a => <option key={a} value={a}>{a}</option>)}
+          </select>
+          <select value={filterResult} onChange={e => setFilterResult(e.target.value)}
+            className="bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-500">
+            <option value="">Todos los resultados</option>
+            <option value="ALLOWED">✅ Permitido</option>
+            <option value="DENIED">❌ Denegado</option>
+          </select>
+          <input type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)}
+            className="bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-500" />
+          <input type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)}
+            className="bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-500" />
+        </div>
+        <div className="flex items-center justify-between">
+          <div className="flex gap-4 text-xs text-gray-400">
+            <span>{audit.length} registros</span>
+            <span className="text-green-400">✅ {allowed} ok</span>
+            <span className="text-red-400">❌ {denied} denegados</span>
+          </div>
+          <button onClick={() => { setFilterAction(''); setFilterResult(''); setFilterDateFrom(''); setFilterDateTo('') }}
+            className="text-xs text-gray-400 hover:text-white">Limpiar filtros</button>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="bg-gray-800 rounded-xl overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-gray-700 text-gray-400 text-xs">
+              <th className="text-left px-4 py-3">Fecha</th>
+              <th className="text-left px-4 py-3">Usuario</th>
+              <th className="text-left px-4 py-3">Acción</th>
+              <th className="text-left px-4 py-3">Recurso</th>
+              <th className="text-left px-4 py-3">Resultado</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={5} className="text-center py-8 text-gray-500">Cargando...</td></tr>
+            ) : audit.length === 0 ? (
+              <tr><td colSpan={5} className="text-center py-8 text-gray-500">Sin registros</td></tr>
+            ) : audit.map(a => (
+              <tr key={a.id} className="border-b border-gray-700/50 hover:bg-gray-700/30">
+                <td className="px-4 py-3 text-gray-400 text-xs">{fmt(a.timestamp)}</td>
+                <td className="px-4 py-3 font-medium text-xs">{a.users?.username ?? '—'}</td>
+                <td className="px-4 py-3 font-mono text-xs text-purple-300">{a.action}</td>
+                <td className="px-4 py-3 text-gray-400 text-xs">{a.resource_type}</td>
+                <td className="px-4 py-3">
+                  {a.permission_check === 'ALLOWED'
+                    ? <span className="text-green-400 text-xs font-semibold">✅ OK</span>
+                    : <span className="text-red-400 text-xs font-semibold">❌ Denegado</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }

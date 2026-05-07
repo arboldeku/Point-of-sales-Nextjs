@@ -1,12 +1,16 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
+import { requirePermission } from '@/lib/auth-middleware';
 
 // Instantiate Prisma client
 const prisma = new PrismaClient();
 
 // Handler function for GET requests
 export async function GET(req: NextRequest) {
+  const auth = await requirePermission(req, 'VIEW_REPORTS', 'Reports')
+  if (!auth.ok) return auth.response
+
   try {
     // Get start and end dates from query parameters
     const { searchParams } = new URL(req.url);
