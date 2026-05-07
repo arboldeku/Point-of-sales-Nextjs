@@ -38,3 +38,12 @@ next-env.d.ts
 
 # vscode
 .vscode
+
+# internal docs (not for public repo)
+AUTH_SETUP.md
+SETUP_AUTH.md
+DEPLOYMENT_CHECKLIST_MAY9.md
+QUICKSTART_E2E_TEST.md
+
+# tests (not for public repo)
+/tests
