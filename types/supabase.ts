@@ -1071,6 +1071,7 @@ export type Database = {
           status: string | null
           trade_amount: number | null
           unit_price: number | null
+          user_id: string | null
         }
         Insert: {
           business_rarity?: string | null
@@ -1092,6 +1093,7 @@ export type Database = {
           status?: string | null
           trade_amount?: number | null
           unit_price?: number | null
+          user_id?: string | null
         }
         Update: {
           business_rarity?: string | null
@@ -1113,6 +1115,7 @@ export type Database = {
           status?: string | null
           trade_amount?: number | null
           unit_price?: number | null
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -1138,6 +1141,7 @@ export type Database = {
           status: string | null
           trade_amount: number | null
           unit_price: number | null
+          user_id: string | null
         }
         Insert: {
           business_rarity?: string | null
@@ -1160,12 +1164,13 @@ export type Database = {
           status?: string | null
           trade_amount?: number | null
           unit_price?: number | null
+          user_id?: string | null
         }
         Update: {
           business_rarity?: string | null
           channel?: string | null
           created_at?: string | null
-          discount_eur?: string | null
+          discount_eur?: number | null
           display_name?: string | null
           game?: string
           gross_amount?: number | null
@@ -1182,6 +1187,7 @@ export type Database = {
           status?: string | null
           trade_amount?: number | null
           unit_price?: number | null
+          user_id?: string | null
         }
         Relationships: []
       }
