@@ -30,7 +30,7 @@ export const POST = async (request: NextRequest) => {
 
     const body = await request.json();
     const userId = payload.userId;
-    const userRole = payload.role;
+    const userRole = payload.role as 'Admin' | 'Member' | 'User';
     const ipAddress = request.headers.get('x-forwarded-for') || 'unknown';
 
     // Check SELL_PRODUCT permission
