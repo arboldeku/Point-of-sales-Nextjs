@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useAuth } from '@/contexts/AuthContext'
 import { supabase, type InventoryCard, type ScanEvent } from '@/lib/supabase'
 import { v4 as uuidv4 } from 'uuid'
 
@@ -67,6 +68,8 @@ function PinModal({ cartCount, subtotal, discount, payMode, onConfirm, onCancel 
 
 // ── Main SalesTab ─────────────────────────────────────────────────────────────
 export default function SalesTab() {
+  const { token } = useAuth()
+
   // Search state
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<InventoryCard[]>([])
@@ -228,8 +231,12 @@ export default function SalesTab() {
 
   const handleConfirmWithPin = async (pin: string) => {
     const endpoint = testMode ? '/api/pos/confirm-test' : '/api/pos/confirm'
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
     const res = await fetch(endpoint, { method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ session_id: sessionId, pin, discount_eur: discount, payment_method: payMode }) })
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || 'Error desconocido')

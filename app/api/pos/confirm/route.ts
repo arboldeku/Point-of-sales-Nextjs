@@ -1,5 +1,7 @@
 import { createServerClient } from '@/lib/supabase'
 import { NextRequest, NextResponse } from 'next/server'
+import { verifyToken } from '@/lib/auth'
+import { logAudit, hasPermission } from '@/lib/permissions'
 import { v4 as uuidv4 } from 'uuid'
 
 const PRISMA_START  = new Date('2026-01-20T00:00:00Z')
@@ -38,8 +40,47 @@ function distributeDiscount(items: { sale_event_id: string; gross_amount: number
 
 export async function POST(req: NextRequest) {
   try {
+    // Extract and validate JWT token
+    const token = req.headers.get('authorization')?.slice(7)
+    if (!token) {
+      return NextResponse.json(
+        { error: 'Token no proporcionado', allowed: false },
+        { status: 401 }
+      )
+    }
+
+    const payload = verifyToken(token)
+    if (!payload) {
+      return NextResponse.json(
+        { error: 'Token inválido', allowed: false },
+        { status: 401 }
+      )
+    }
+
     const body = await req.json()
     const { session_id, pin, discount_eur = 0, payment_method = 'efectivo' } = body
+
+    const userId = payload.userId
+    const userRole = payload.role as 'Admin' | 'Member' | 'User'
+    const ipAddress = req.headers.get('x-forwarded-for') || 'unknown'
+
+    // Check SELL_PRODUCT permission
+    const canSell = await hasPermission(userRole, 'SELL_PRODUCT')
+    if (!canSell) {
+      await logAudit(
+        userId,
+        'SELL_PRODUCT',
+        'Transaction',
+        null,
+        'DENIED',
+        { action: 'attempted_confirm_sale', session_id },
+        ipAddress
+      )
+      return NextResponse.json(
+        { error: 'No tienes permiso para confirmar ventas', allowed: false },
+        { status: 403 }
+      )
+    }
 
     const correctPin = process.env.POS_CONFIRM_PIN
     if (!correctPin || pin !== correctPin) {
@@ -78,10 +119,10 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // Set payment_method on all pending items
+    // Set payment_method and user_id on all pending items
     await supabase
       .from('scan_events')
-      .update({ payment_method })
+      .update({ payment_method, user_id: userId })
       .eq('session_id', session_id)
       .eq('status', 'pending')
 
@@ -146,6 +187,17 @@ export async function POST(req: NextRequest) {
 
     // Release all locks for this session
     await supabase.from('cart_locks').delete().eq('session_id', session_id)
+
+    // Log successful sale
+    await logAudit(
+      userId,
+      'SELL_PRODUCT',
+      'Transaction',
+      null,
+      'ALLOWED',
+      { action: 'sale_confirmed', session_id, items_count: pendingItems.length, discount: discount_eur },
+      ipAddress
+    )
 
     return NextResponse.json({ success: true, result: data })
   } catch (err: any) {
